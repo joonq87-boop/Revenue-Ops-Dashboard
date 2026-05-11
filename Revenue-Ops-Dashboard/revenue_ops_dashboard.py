@@ -13,51 +13,69 @@ st.set_page_config(page_title="Normality Revenue Optimizer", page_icon="⚡", la
 
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
-    html, body, [class*="css"] { font-family: 'IBM Plex Sans', sans-serif; background: #f7f8fa; }
-    .tct-header { background:linear-gradient(135deg,#0a1628 0%,#132743 100%); border-radius:12px; padding:1.25rem 1.75rem; margin-bottom:1rem; display:flex; justify-content:space-between; align-items:center; }
-    .tct-title { color:white; font-size:1.4rem; font-weight:600; } .tct-subtitle { color:#94a3b8; font-size:0.78rem; letter-spacing:0.08em; text-transform:uppercase; margin-top:0.15rem; }
-    .tct-badge { background:#16a34a; color:white; font-size:0.7rem; font-weight:600; padding:4px 12px; border-radius:20px; }
-    .tct-currency { background:rgba(255,255,255,0.1); color:white; font-size:0.8rem; padding:4px 12px; border-radius:6px; border:1px solid rgba(255,255,255,0.15); }
-    .metric-card { background:white; border:1px solid #e2e8f0; border-radius:10px; padding:1.1rem 1.3rem; }
-    .metric-card-dark { background:linear-gradient(135deg,#0a1628 0%,#1a2d4d 100%); border:none; border-radius:10px; padding:1.1rem 1.3rem; }
-    .metric-card-dark .metric-label { color:#94a3b8; } .metric-card-dark .metric-value { color:white; }
-    .metric-card-green { border-left:4px solid #16a34a; } .metric-card-red { border-left:4px solid #dc2626; }
-    .metric-card-amber { border-left:4px solid #f59e0b; } .metric-card-blue { border-left:4px solid #0369a1; }
-    .metric-label { font-size:0.7rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:#64748b; margin-bottom:0.35rem; }
-    .metric-value { font-size:1.7rem; font-weight:600; color:#0f172a; line-height:1; font-family:'IBM Plex Mono',monospace; }
-    .metric-delta { font-size:0.78rem; margin-top:0.25rem; }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+    html, body, [class*="css"] { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: #f8f9fb; }
+    .tct-header { background:linear-gradient(135deg,#0c1222 0%,#162040 50%,#1a2a52 100%); border-radius:16px; padding:1.5rem 2rem; margin-bottom:1.25rem; display:flex; justify-content:space-between; align-items:center; box-shadow:0 4px 24px rgba(10,22,40,0.12); }
+    .tct-title { color:white; font-size:1.5rem; font-weight:700; letter-spacing:-0.02em; } .tct-subtitle { color:rgba(148,163,184,0.9); font-size:0.72rem; letter-spacing:0.12em; text-transform:uppercase; margin-top:0.2rem; font-weight:500; }
+    .tct-badge { background:linear-gradient(135deg,#16a34a,#22c55e); color:white; font-size:0.68rem; font-weight:600; padding:5px 14px; border-radius:20px; letter-spacing:0.03em; }
+    .tct-currency { background:rgba(255,255,255,0.08); color:rgba(255,255,255,0.85); font-size:0.78rem; padding:5px 14px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); backdrop-filter:blur(8px); font-weight:500; }
+    .metric-card { background:white; border:1px solid rgba(226,232,240,0.8); border-radius:14px; padding:1.15rem 1.4rem; transition:box-shadow 0.2s,transform 0.15s; }
+    .metric-card:hover { box-shadow:0 2px 12px rgba(0,0,0,0.04); transform:translateY(-1px); }
+    .metric-card-dark { background:linear-gradient(135deg,#0c1222 0%,#1a2d4d 100%); border:none; border-radius:14px; padding:1.15rem 1.4rem; box-shadow:0 4px 20px rgba(10,22,40,0.10); }
+    .metric-card-dark .metric-label { color:rgba(148,163,184,0.85); } .metric-card-dark .metric-value { color:white; }
+    .metric-card-green { border-left:3px solid #16a34a; } .metric-card-red { border-left:3px solid #dc2626; }
+    .metric-card-amber { border-left:3px solid #f59e0b; } .metric-card-blue { border-left:3px solid #0369a1; }
+    .metric-label { font-size:0.68rem; font-weight:600; letter-spacing:0.1em; text-transform:uppercase; color:#64748b; margin-bottom:0.4rem; }
+    .metric-value { font-size:1.65rem; font-weight:700; color:#0f172a; line-height:1; font-family:'JetBrains Mono',monospace; letter-spacing:-0.02em; }
+    .metric-delta { font-size:0.76rem; margin-top:0.3rem; font-weight:500; }
     .metric-delta.good { color:#16a34a; } .metric-delta.bad { color:#dc2626; } .metric-delta.neutral { color:#64748b; }
-    .mex { font-size:0.66rem; color:#94a3b8; margin-top:0.4rem; border-top:1px solid #f1f5f9; padding-top:0.35rem; line-height:1.4; }
-    .msrc { font-size:0.6rem; color:#bdc5d1; line-height:1.25; }
-    .section-card { background:white; border:1px solid #e2e8f0; border-radius:10px; padding:1.5rem; margin-bottom:1rem; }
-    .section-title { font-size:0.8rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:#64748b; margin-bottom:1rem; padding-bottom:0.75rem; border-bottom:1px solid #f1f5f9; }
-    .risk-badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:0.72rem; font-weight:600; }
-    .risk-high { background:#fee2e2; color:#991b1b; } .risk-med { background:#fef3c7; color:#92400e; } .risk-low { background:#dcfce7; color:#166534; }
+    .mex { font-size:0.65rem; color:#94a3b8; margin-top:0.45rem; border-top:1px solid #f1f5f9; padding-top:0.4rem; line-height:1.45; }
+    .msrc { font-size:0.58rem; color:#bdc5d1; line-height:1.3; }
+    .section-card { background:white; border:1px solid rgba(226,232,240,0.7); border-radius:16px; padding:1.6rem; margin-bottom:1rem; box-shadow:0 1px 3px rgba(0,0,0,0.02); }
+    .section-title { font-size:0.76rem; font-weight:600; letter-spacing:0.1em; text-transform:uppercase; color:#475569; margin-bottom:1rem; padding-bottom:0.75rem; border-bottom:1px solid #f1f5f9; }
+    .risk-badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:0.7rem; font-weight:600; letter-spacing:0.02em; }
+    .risk-high { background:#fef2f2; color:#b91c1c; } .risk-med { background:#fffbeb; color:#92400e; } .risk-low { background:#f0fdf4; color:#166534; }
     .risk-why { font-size:0.7rem; color:#94a3b8; font-style:italic; margin-top:0.25rem; }
     .insight-row { display:flex; align-items:flex-start; gap:0.75rem; padding:0.75rem 0; border-bottom:1px solid #f1f5f9; font-size:0.9rem; }
     .insight-row:last-child { border-bottom:none; }
-    .progress-bar-bg { background:#f1f5f9; border-radius:4px; height:8px; width:100%; margin-top:6px; }
-    .progress-bar-fill { height:8px; border-radius:4px; }
-    .news-card { background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:0.9rem 1rem; margin-bottom:0.6rem; }
-    .news-tag { display:inline-block; font-size:0.7rem; font-weight:600; padding:2px 8px; border-radius:20px; margin-right:4px; background:#e0f2fe; color:#0369a1; }
-    .info-box { background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; padding:0.75rem 1rem; font-size:0.82rem; color:#0369a1; margin-bottom:0.75rem; }
-    .module-card { background:white; border:1px solid #e2e8f0; border-radius:10px; padding:1.1rem; text-align:center; }
+    .progress-bar-bg { background:#f1f5f9; border-radius:6px; height:7px; width:100%; margin-top:6px; }
+    .progress-bar-fill { height:7px; border-radius:6px; }
+    .news-card { background:#f8fafc; border:1px solid rgba(226,232,240,0.6); border-radius:12px; padding:0.9rem 1rem; margin-bottom:0.6rem; }
+    .news-tag { display:inline-block; font-size:0.68rem; font-weight:600; padding:2px 9px; border-radius:20px; margin-right:4px; background:#eff6ff; color:#1d4ed8; }
+    .info-box { background:linear-gradient(135deg,#eff6ff,#f0f9ff); border:1px solid #bfdbfe; border-radius:12px; padding:0.85rem 1.1rem; font-size:0.82rem; color:#1e40af; margin-bottom:0.75rem; }
+    .module-card { background:white; border:1px solid rgba(226,232,240,0.7); border-radius:14px; padding:1.1rem; text-align:center; transition:box-shadow 0.2s; }
+    .module-card:hover { box-shadow:0 2px 12px rgba(0,0,0,0.04); }
     .mod-explain { font-size:0.62rem; color:#94a3b8; margin-top:0.3rem; line-height:1.3; }
-    .agent-card { background:#f8fafc; border-left:4px solid #0369a1; border-radius:0 8px 8px 0; padding:0.9rem 1rem; margin-bottom:0.6rem; }
+    .agent-card { background:#f8fafc; border-left:3px solid #0369a1; border-radius:0 12px 12px 0; padding:0.9rem 1rem; margin-bottom:0.6rem; }
     .agent-card.high { border-left-color:#dc2626; } .agent-card.medium { border-left-color:#f59e0b; } .agent-card.low { border-left-color:#16a34a; }
-    .upload-hint { background:#f8fafc; border:1.5px dashed #cbd5e1; border-radius:10px; padding:2rem; text-align:center; color:#64748b; font-size:0.9rem; }
-    .stButton > button { background:#0a1628; color:white; border:none; border-radius:8px; padding:0.5rem 1.25rem; font-family:'IBM Plex Sans',sans-serif; font-size:0.9rem; font-weight:500; }
-    .stButton > button:hover { background:#132743; }
-    .var-card { background:white; border:1px solid #e2e8f0; border-radius:8px; padding:0.75rem 1rem; margin-bottom:0.5rem; }
-    .var-label { font-size:0.85rem; font-weight:600; color:#0f172a; } .var-badge { font-size:0.65rem; font-weight:600; padding:2px 8px; border-radius:10px; background:#e0f2fe; color:#0369a1; float:right; }
+    .upload-hint { background:linear-gradient(135deg,#f8fafc,#f1f5f9); border:1.5px dashed #cbd5e1; border-radius:14px; padding:2rem; text-align:center; color:#64748b; font-size:0.88rem; }
+    .stButton > button { background:linear-gradient(135deg,#0c1222,#1a2a52); color:white; border:none; border-radius:10px; padding:0.55rem 1.4rem; font-family:'Inter',sans-serif; font-size:0.88rem; font-weight:600; letter-spacing:0.01em; transition:all 0.2s; box-shadow:0 2px 8px rgba(10,22,40,0.12); }
+    .stButton > button:hover { background:linear-gradient(135deg,#162040,#233568); transform:translateY(-1px); box-shadow:0 4px 16px rgba(10,22,40,0.18); }
+    .var-card { background:white; border:1px solid rgba(226,232,240,0.7); border-radius:10px; padding:0.75rem 1rem; margin-bottom:0.5rem; }
+    .var-label { font-size:0.85rem; font-weight:600; color:#0f172a; } .var-badge { font-size:0.63rem; font-weight:600; padding:2px 8px; border-radius:10px; background:#eff6ff; color:#1d4ed8; float:right; }
     .var-row { display:flex; justify-content:space-between; font-size:0.82rem; margin-top:0.3rem; }
-    .var-pos { color:#16a34a; font-family:'IBM Plex Mono',monospace; font-weight:600; } .var-neg { color:#dc2626; font-family:'IBM Plex Mono',monospace; font-weight:600; }
-    .cp-table { width:100%; border-collapse:collapse; font-size:0.85rem; }
-    .cp-table th { text-align:left; font-size:0.72rem; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:#64748b; padding:0.5rem 0.75rem; border-bottom:2px solid #e2e8f0; }
-    .cp-table td { padding:0.5rem 0.75rem; border-bottom:1px solid #f1f5f9; font-family:'IBM Plex Mono',monospace; font-size:0.82rem; }
+    .var-pos { color:#16a34a; font-family:'JetBrains Mono',monospace; font-weight:600; } .var-neg { color:#dc2626; font-family:'JetBrains Mono',monospace; font-weight:600; }
+    .cp-table { width:100%; border-collapse:separate; border-spacing:0; font-size:0.84rem; }
+    .cp-table th { text-align:left; font-size:0.7rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:#64748b; padding:0.6rem 0.75rem; border-bottom:2px solid #e2e8f0; }
+    .cp-table td { padding:0.55rem 0.75rem; border-bottom:1px solid #f1f5f9; font-family:'JetBrains Mono',monospace; font-size:0.8rem; }
+    .cp-table tr:hover td { background:#f8fafc; }
     .cp-green { color:#16a34a; } .cp-red { color:#dc2626; }
+    .dash-nav { display:flex; gap:6px; margin-bottom:1.25rem; flex-wrap:wrap; }
+    .dash-nav-btn { padding:8px 18px; border-radius:10px; font-size:0.82rem; font-weight:600; cursor:pointer; border:1px solid transparent; transition:all 0.2s; letter-spacing:0.01em; }
+    .dash-nav-btn.active { background:linear-gradient(135deg,#0c1222,#1a2a52); color:white; box-shadow:0 2px 8px rgba(10,22,40,0.15); }
+    .dash-nav-btn.inactive { background:white; color:#475569; border-color:#e2e8f0; }
+    .dash-nav-btn.inactive:hover { background:#f8fafc; border-color:#cbd5e1; }
+    .stTabs [data-baseweb="tab-list"] { gap:4px; background:transparent; }
+    .stTabs [data-baseweb="tab"] { font-family:'Inter',sans-serif; font-size:0.82rem; font-weight:600; border-radius:10px; padding:8px 16px; color:#475569; }
+    .stTabs [data-baseweb="tab"][aria-selected="true"] { background:linear-gradient(135deg,#0c1222,#1a2a52); color:white; }
+    .stTabs [data-baseweb="tab-highlight"] { display:none; }
+    .stTabs [data-baseweb="tab-border"] { display:none; }
+    .stDownloadButton > button { background:white; color:#0c1222; border:1px solid #e2e8f0; border-radius:10px; font-weight:600; font-size:0.82rem; }
+    .stDownloadButton > button:hover { background:#f8fafc; border-color:#cbd5e1; }
+    div[data-testid="stExpander"] { border:1px solid rgba(226,232,240,0.7); border-radius:14px; overflow:hidden; }
     #MainMenu { visibility:hidden; } footer { visibility:hidden; }
+    .stSelectbox > div > div { border-radius:10px; }
+    .stNumberInput > div > div > input { border-radius:10px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -388,10 +406,22 @@ with h5:
     st.markdown("<br>",unsafe_allow_html=True)
     if st.button("Reset"): reset(); st.rerun()
 
-tabs=st.tabs(["Setup","Executive Summary","Demand Forecasting","Order Management","Fulfilment & Logistics","Billing & Revenue","Post-Sales & Closure","Cash App & LTV"])
+tabs=st.tabs(["⚙ Setup","📊 ForecastIQ Dashboard","📋 O2C Performance Hub","💰 CFO Dashboard","🏦 Cash App & LTV Engine"])
 
 with tabs[0]:
-    st.markdown('<div style="font-size:1.3rem;font-weight:600;color:#0a1628">Setup & Configuration</div><div style="font-size:0.9rem;color:#64748b;margin-bottom:1.5rem">Upload data, complete maturity assessment, then run analysis.</div>',unsafe_allow_html=True)
+    st.markdown('<div style="font-size:1.3rem;font-weight:700;color:#0c1222;letter-spacing:-0.02em">Setup & Configuration</div><div style="font-size:0.88rem;color:#64748b;margin-bottom:1.5rem">Upload data, complete maturity assessment, then run analysis.</div>',unsafe_allow_html=True)
+    # --- Downloadable CSV Templates ---
+    st.markdown('<div class="section-card"><div class="section-title">Data Templates — Download & Fill</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.75rem">Download these CSV templates to see the exact format expected. Fill with your data and re-upload, or click Demo Data to use sample data.</div>',unsafe_allow_html=True)
+    tpl1,tpl2=st.columns(2)
+    with tpl1:
+        tpl_fc = sample_demand()
+        st.download_button("⬇ Download Demand & Forecast Template", tpl_fc.to_csv(index=False).encode('utf-8'), "demand_forecast_template.csv", "text/csv", key="dl_fc", use_container_width=True)
+        st.markdown('<div style="font-size:0.75rem;color:#94a3b8;margin-top:0.25rem">Columns: Month, SKU, Actual_Units, Forecast_Units, Orders_Placed, Orders_OTIF — 48 rows (4 SKUs × 12 months)</div>',unsafe_allow_html=True)
+    with tpl2:
+        tpl_o2c = sample_o2c(region)
+        st.download_button("⬇ Download Order-to-Cash Template", tpl_o2c.to_csv(index=False).encode('utf-8'), "order_to_cash_template.csv", "text/csv", key="dl_o2c", use_container_width=True)
+        st.markdown('<div style="font-size:0.75rem;color:#94a3b8;margin-top:0.25rem">Columns: Order_ID, Customer, Order_Date, Invoice_Date, Payment_Date, Invoice_Amount_USD, DSO_Days, + flags — 80 rows</div>',unsafe_allow_html=True)
+    st.markdown("</div>",unsafe_allow_html=True)
     c1,c2=st.columns(2)
     with c1:
         st.markdown('<div class="section-card"><div class="section-title">Demand & Forecast CSV</div>',unsafe_allow_html=True)
@@ -458,7 +488,7 @@ with tabs[0]:
                 st.session_state.market_fetched=True; st.rerun()
         if st.session_state.done: st.success("Analysis complete — explore tabs above.")
 
-with tabs[1]:
+with tabs[2]:
     if not st.session_state.done: st.info("Complete Setup and click Run Full Analysis.")
     else:
         ai=st.session_state.ai_exec or {}; bl=st.session_state.bl; ps=st.session_state.ps; s=ai.get("health_score",0)
@@ -479,7 +509,7 @@ with tabs[1]:
             st.markdown('<div class="section-card"><div class="section-title">Cash Flow Trend</div>',unsafe_allow_html=True)
             cf=bl["cashflow"].head(6); cd=pd.DataFrame({"Month":cf["Month"],"Inflow":cf["Inflow"],"Outflow":-cf["Outflow"].abs()}).set_index("Month")
             st.bar_chart(cd,color=["#16a34a","#dc2626"])
-            nt=cf["Net"].sum(); st.markdown(f'<div style="text-align:center;font-size:0.85rem;color:#64748b">Net Fund Flow: <span style="font-family:IBM Plex Mono,monospace;font-weight:600;color:{"#16a34a" if nt>=0 else "#dc2626"}">{fmtc(nt,ccy)}</span></div>',unsafe_allow_html=True)
+            nt=cf["Net"].sum(); st.markdown(f'<div style="text-align:center;font-size:0.85rem;color:#64748b">Net Fund Flow: <span style="font-family:JetBrains Mono,monospace;font-weight:600;color:{"#16a34a" if nt>=0 else "#dc2626"}">{fmtc(nt,ccy)}</span></div>',unsafe_allow_html=True)
             st.markdown("</div>",unsafe_allow_html=True)
         st.markdown("<br>",unsafe_allow_html=True)
         cs,csm=st.columns([1,2])
@@ -491,7 +521,7 @@ with tabs[1]:
             mc=st.columns(5)
             for col,(mn,mv) in zip(mc,ms.items()):
                 ex="Operating above benchmark" if mv>=70 else "Gaps identified — improvement needed" if mv>=45 else "Critical — significant intervention needed"
-                with col: st.markdown(f'<div class="module-card"><div style="font-size:0.63rem;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:#64748b">{icons.get(mn,"")} {mn}</div><div style="font-size:1.7rem;font-weight:600;font-family:IBM Plex Mono,monospace;color:{scolor(mv)};margin:0.4rem 0">{mv}</div><div class="mod-explain">{ex}</div></div>',unsafe_allow_html=True)
+                with col: st.markdown(f'<div class="module-card"><div style="font-size:0.63rem;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:#64748b">{icons.get(mn,"")} {mn}</div><div style="font-size:1.7rem;font-weight:600;font-family:JetBrains Mono,monospace;color:{scolor(mv)};margin:0.4rem 0">{mv}</div><div class="mod-explain">{ex}</div></div>',unsafe_allow_html=True)
             st.markdown("</div>",unsafe_allow_html=True)
         st.markdown("<br>",unsafe_allow_html=True)
         cl,cr=st.columns(2)
@@ -514,7 +544,7 @@ with tabs[1]:
             st.markdown(f'<div class="agent-card {sv}"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.3rem"><span style="font-size:0.75rem;font-weight:600;color:#0a1628">Day {item.get("day","?")} · {item.get("module","")}</span><span class="risk-badge {sc2}">{item.get("severity","")}</span></div><div style="font-weight:500;font-size:0.9rem;margin-bottom:0.25rem">{item.get("action","")}</div><div style="font-size:0.82rem;color:#64748b">Trigger: {item.get("trigger","")}</div><div style="font-size:0.82rem;color:#16a34a;margin-top:0.2rem">{item.get("impact","")}</div></div>',unsafe_allow_html=True)
         st.markdown("</div>",unsafe_allow_html=True)
 
-with tabs[2]:
+with tabs[1]:
     if not st.session_state.done: st.info("Upload data and Run Full Analysis.")
     else:
         dm=st.session_state.dm; ob=INDUSTRIES[industry]["otif_benchmark"]
@@ -542,7 +572,7 @@ with tabs[2]:
             st.markdown('<div class="section-card"><div class="section-title">SKU Performance</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.75rem">Per-SKU accuracy = 100 - SKU MAPE. Green: 70+, Amber: 45-69, Red: below 45.</div>',unsafe_allow_html=True)
             for _,row in dm["sku"].sort_values("Accuracy",ascending=False).iterrows():
                 c=scolor(row["Accuracy"])
-                st.markdown(f'<div style="margin-bottom:1rem"><div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:3px"><span style="font-weight:500">{row["SKU"]}</span><span style="color:{c};font-family:IBM Plex Mono,monospace;font-weight:500">{row["Accuracy"]}%</span></div><div class="progress-bar-bg"><div class="progress-bar-fill" style="width:{min(100,row["Accuracy"])}%;background:{c}"></div></div><div style="font-size:0.75rem;color:#94a3b8;margin-top:3px">MAPE: {row["MAPE"]}% Bias: {row["Bias"]:+.1f}%</div></div>',unsafe_allow_html=True)
+                st.markdown(f'<div style="margin-bottom:1rem"><div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:3px"><span style="font-weight:500">{row["SKU"]}</span><span style="color:{c};font-family:JetBrains Mono,monospace;font-weight:500">{row["Accuracy"]}%</span></div><div class="progress-bar-bg"><div class="progress-bar-fill" style="width:{min(100,row["Accuracy"])}%;background:{c}"></div></div><div style="font-size:0.75rem;color:#94a3b8;margin-top:3px">MAPE: {row["MAPE"]}% Bias: {row["Bias"]:+.1f}%</div></div>',unsafe_allow_html=True)
             st.markdown("</div>",unsafe_allow_html=True)
         with cr2:
             if st.session_state.market_fetched and st.session_state.market_ai:
@@ -552,9 +582,9 @@ with tabs[2]:
                 st.markdown("</div>",unsafe_allow_html=True)
             else: st.markdown('<div class="section-card"><div class="section-title">External Demand Signals</div><div class="upload-hint">Click Fetch Market Intel in Setup.</div></div>',unsafe_allow_html=True)
 
-with tabs[3]:
-    if not st.session_state.done: st.info("Upload data and Run Full Analysis.")
-    else:
+        # ─── ORDER MANAGEMENT ───
+        st.markdown('<div style="margin-top:2rem;margin-bottom:0.5rem;font-size:0.65rem;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:#0369a1;padding:6px 0;border-top:2px solid #0369a1">ORDER MANAGEMENT</div>',unsafe_allow_html=True)
+    if st.session_state.done:
         om=st.session_state.om; bc=INDUSTRIES[industry]["cycle_benchmark"]
         c1,c2,c3,c4=st.columns(4)
         with c1: st.markdown(mcard("Order Cycle",f'{om["cycle"]}d',f'Bench: {bc}d',"good" if om["cycle"]<=bc else "bad","Avg days from Order_Date to Invoice_Date.",f"Bench: {bc}d for {industry}. Source: APQC O2C Benchmarks","metric-card metric-card-blue"),unsafe_allow_html=True)
@@ -581,12 +611,12 @@ with tabs[3]:
                 conf_co = "#16a34a" if o["confidence"] >= 85 else "#f59e0b" if o["confidence"] >= 70 else "#dc2626"
                 st_cls = "risk-low" if o["status"] == "Auto-Parsed" else "risk-med" if o["status"] == "Human Review" else "risk-high"
                 missing_txt = f' · Missing: {", ".join(o["missing_fields"])}' if o["missing_fields"] else ""
-                st.markdown(f'<div style="display:flex;justify-content:space-between;align-items:center;padding:0.6rem 0;border-bottom:1px solid #f1f5f9"><div><span style="font-weight:500;font-size:0.85rem">{o["po_id"]}</span> <span style="font-size:0.75rem;color:#94a3b8">· {o["customer"]} · {o["channel"]}</span><div style="font-size:0.75rem;color:#64748b;margin-top:2px">{o["fields_extracted"]}/{o["fields_total"]} fields · {o["processing_time"]}{missing_txt}</div></div><div style="display:flex;align-items:center;gap:8px"><span style="font-family:IBM Plex Mono,monospace;font-size:0.82rem;font-weight:600;color:{conf_co}">{o["confidence"]}%</span><span class="risk-badge {st_cls}">{o["status"]}</span></div></div>',unsafe_allow_html=True)
+                st.markdown(f'<div style="display:flex;justify-content:space-between;align-items:center;padding:0.6rem 0;border-bottom:1px solid #f1f5f9"><div><span style="font-weight:500;font-size:0.85rem">{o["po_id"]}</span> <span style="font-size:0.75rem;color:#94a3b8">· {o["customer"]} · {o["channel"]}</span><div style="font-size:0.75rem;color:#64748b;margin-top:2px">{o["fields_extracted"]}/{o["fields_total"]} fields · {o["processing_time"]}{missing_txt}</div></div><div style="display:flex;align-items:center;gap:8px"><span style="font-family:JetBrains Mono,monospace;font-size:0.82rem;font-weight:600;color:{conf_co}">{o["confidence"]}%</span><span class="risk-badge {st_cls}">{o["status"]}</span></div></div>',unsafe_allow_html=True)
             st.markdown("</div>",unsafe_allow_html=True)
 
-with tabs[4]:
-    if not st.session_state.done: st.info("Upload data and Run Full Analysis.")
-    else:
+        # ─── ORDER FULFILMENT & LOGISTICS ───
+        st.markdown('<div style="margin-top:2rem;margin-bottom:0.5rem;font-size:0.65rem;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:#b45309;padding:6px 0;border-top:2px solid #b45309">ORDER FULFILMENT & LOGISTICS</div>',unsafe_allow_html=True)
+    if st.session_state.done:
         fl=st.session_state.fl
         c1,c2,c3,c4=st.columns(4)
         with c1: st.markdown(mcard("OTIF",f'{fl["otif"]}%',f'Bench: {fl["otif_bench"]}%',"good" if fl["otif"]>=fl["otif_bench"] else "bad","Avg of OTIF_Flag x 100. On-Time In-Full delivery rate.",f"Bench: McKinsey OTIF Consumer Sector (2019). Walmart mandates 98%.","metric-card metric-card-blue"),unsafe_allow_html=True)
@@ -608,7 +638,7 @@ with tabs[4]:
                 st.markdown(f'<div class="news-card"><div style="font-size:0.9rem;font-weight:500">{a["title"]}</div><div style="font-size:0.75rem;color:#94a3b8">{a["source"]} {a["published"]}</div><div style="margin-top:0.3rem">{tags}</div></div>',unsafe_allow_html=True)
             st.markdown("</div>",unsafe_allow_html=True)
 
-with tabs[5]:
+with tabs[3]:
     if not st.session_state.done: st.info("Upload data and Run Full Analysis.")
     else:
         bl=st.session_state.bl; lpct=round((bl["leak_total"]/max(bl["rev"],1))*100,1)
@@ -637,13 +667,13 @@ with tabs[5]:
             rev=bl["rev"]; net=rev-bl["leak_total"]
             for lb,v,co,d in [("Gross Revenue",rev,"#0a1628","Total invoiced revenue"),("Discounting",-bl["leak_disc"],"#dc2626","1.8% of revenue — rogue discounts (McKinsey O2C benchmark)"),("Invoice Errors",-bl["leak_inv"],"#ea580c",f'{bl["err"]}% error rate x 2.5% cost per error (APQC)'),("Disputes",-bl["leak_disp"],"#f59e0b",f'{bl["disp"]}% dispute rate x 5% cost (Normality SPAN 4.2)'),("Deductions",-bl["leak_ded"],"#8b5cf6","0.8% — out-of-terms deductions (Expert Interview)"),("Net Recovered",net,"#16a34a","After all leakage types addressed")]:
                 neg=v<0; dv=f"-{fmtc(abs(v),ccy)}" if neg else fmtc(v,ccy); pct=min(100,abs(v)/max(rev,1)*100)
-                st.markdown(f'<div style="margin-bottom:0.75rem"><div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:4px"><span style="font-weight:500">{lb}</span><span style="font-family:IBM Plex Mono,monospace;font-weight:600;color:{co}">{dv}</span></div><div class="progress-bar-bg"><div class="progress-bar-fill" style="width:{pct}%;background:{co}"></div></div><div style="font-size:0.68rem;color:#94a3b8;margin-top:3px">{d}</div></div>',unsafe_allow_html=True)
+                st.markdown(f'<div style="margin-bottom:0.75rem"><div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:4px"><span style="font-weight:500">{lb}</span><span style="font-family:JetBrains Mono,monospace;font-weight:600;color:{co}">{dv}</span></div><div class="progress-bar-bg"><div class="progress-bar-fill" style="width:{pct}%;background:{co}"></div></div><div style="font-size:0.68rem;color:#94a3b8;margin-top:3px">{d}</div></div>',unsafe_allow_html=True)
             st.markdown("</div>",unsafe_allow_html=True)
         with cr:
             st.markdown('<div class="section-card"><div class="section-title">Customer DSO Risk</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.75rem">High: DSO > 1.4x benchmark. Medium: > 1.1x benchmark. Low: at or below.</div>',unsafe_allow_html=True)
             for _,row in bl["cust"].head(8).iterrows():
                 r=row["Risk"]; rc="risk-high" if r=="High" else "risk-med" if r=="Medium" else "risk-low"
-                st.markdown(f'<div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid #f1f5f9"><span style="font-size:0.85rem;font-weight:500">{row["Customer"]}</span><span><span style="font-family:IBM Plex Mono,monospace;font-size:0.85rem;margin-right:8px">{row["Avg_DSO"]}d</span><span class="risk-badge {rc}">{r}</span></span></div>',unsafe_allow_html=True)
+                st.markdown(f'<div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid #f1f5f9"><span style="font-size:0.85rem;font-weight:500">{row["Customer"]}</span><span><span style="font-family:JetBrains Mono,monospace;font-size:0.85rem;margin-right:8px">{row["Avg_DSO"]}d</span><span class="risk-badge {rc}">{r}</span></span></div>',unsafe_allow_html=True)
             st.markdown("</div>",unsafe_allow_html=True)
         # --- BillingEngine Auto-Invoice Simulation ---
         if st.session_state.invoice_demo:
@@ -659,12 +689,12 @@ with tabs[5]:
                 st_cls = "risk-low" if inv["status"] == "Auto-Generated" else "risk-high"
                 checks_html = " ".join([f'<span style="font-size:0.65rem;background:#dcfce7;color:#166534;padding:1px 6px;border-radius:10px;margin-right:2px">✓ {c}</span>' for c in inv["checks_passed"]])
                 fail_html = " ".join([f'<span style="font-size:0.65rem;background:#fee2e2;color:#991b1b;padding:1px 6px;border-radius:10px;margin-right:2px">✗ {c}</span>' for c in inv["checks_failed"]])
-                st.markdown(f'<div style="padding:0.6rem 0;border-bottom:1px solid #f1f5f9"><div style="display:flex;justify-content:space-between;align-items:center"><div><span style="font-weight:500;font-size:0.85rem">{inv["invoice_id"]}</span> <span style="font-size:0.75rem;color:#94a3b8">· {inv["customer"]} · {inv["trigger"]}</span></div><div style="display:flex;align-items:center;gap:8px"><span style="font-family:IBM Plex Mono,monospace;font-size:0.82rem">{fmtc(inv["amount_usd"],ccy)}</span><span class="risk-badge {st_cls}">{inv["status"]}</span></div></div><div style="margin-top:4px">{checks_html}{fail_html}</div><div style="font-size:0.7rem;color:#94a3b8;margin-top:2px">⏱ {inv["time_to_invoice"]} (was: {inv["before_time"]})</div></div>',unsafe_allow_html=True)
+                st.markdown(f'<div style="padding:0.6rem 0;border-bottom:1px solid #f1f5f9"><div style="display:flex;justify-content:space-between;align-items:center"><div><span style="font-weight:500;font-size:0.85rem">{inv["invoice_id"]}</span> <span style="font-size:0.75rem;color:#94a3b8">· {inv["customer"]} · {inv["trigger"]}</span></div><div style="display:flex;align-items:center;gap:8px"><span style="font-family:JetBrains Mono,monospace;font-size:0.82rem">{fmtc(inv["amount_usd"],ccy)}</span><span class="risk-badge {st_cls}">{inv["status"]}</span></div></div><div style="margin-top:4px">{checks_html}{fail_html}</div><div style="font-size:0.7rem;color:#94a3b8;margin-top:2px">⏱ {inv["time_to_invoice"]} (was: {inv["before_time"]})</div></div>',unsafe_allow_html=True)
             st.markdown("</div>",unsafe_allow_html=True)
 
-with tabs[6]:
-    if not st.session_state.done: st.info("Upload data and Run Full Analysis.")
-    else:
+        # ─── POST-SALES & WORKING CAPITAL ───
+        st.markdown('<div style="margin-top:2rem;margin-bottom:0.5rem;font-size:0.65rem;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:#7c3aed;padding:6px 0;border-top:2px solid #7c3aed">POST-SALES & WORKING CAPITAL</div>',unsafe_allow_html=True)
+    if st.session_state.done:
         ps=st.session_state.ps
         c1,c2,c3,c4=st.columns(4)
         with c1: st.markdown(f'<div class="metric-card-dark"><div class="metric-label">WC Health</div><div class="metric-value" style="color:{"#4ade80" if ps["score"]>=70 else "#f87171"}">{ps["score"]}</div><div style="font-size:0.78rem;color:#94a3b8;margin-top:0.3rem">{ps["health"]}</div><div class="mex" style="color:#64748b">100 - (CCC gap / benchmark x 50). 70+ Good, 45-69 At Risk, &lt;45 Critical.</div></div>',unsafe_allow_html=True)
@@ -682,7 +712,7 @@ with tabs[6]:
         with al:
             st.markdown('<div class="section-card"><div class="section-title">Receivables Aging</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.75rem">Distribution of invoices by payment delay. Green = current. Red = 90+ days (write-off risk). Source: Your DSO data.</div>',unsafe_allow_html=True)
             for lb,v,co in [("Current (0-30d)",ps["aging"]["current"],"#16a34a"),("31-60 days",ps["aging"]["30d"],"#f59e0b"),("61-90 days",ps["aging"]["60d"],"#ea580c"),("90+ days",ps["aging"]["90d"],"#dc2626")]:
-                st.markdown(f'<div style="margin-bottom:0.5rem"><div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:3px"><span style="font-weight:500">{lb}</span><span style="font-family:IBM Plex Mono,monospace;font-weight:600;color:{co}">{v}%</span></div><div class="progress-bar-bg"><div class="progress-bar-fill" style="width:{v}%;background:{co}"></div></div></div>',unsafe_allow_html=True)
+                st.markdown(f'<div style="margin-bottom:0.5rem"><div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:3px"><span style="font-weight:500">{lb}</span><span style="font-family:JetBrains Mono,monospace;font-weight:600;color:{co}">{v}%</span></div><div class="progress-bar-bg"><div class="progress-bar-fill" style="width:{v}%;background:{co}"></div></div></div>',unsafe_allow_html=True)
             st.markdown("</div>",unsafe_allow_html=True)
         with ar:
             st.markdown('<div class="section-card"><div class="section-title">Upcoming Cash Position</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.75rem">Forward-looking daily projection. Inflow = expected customer payments. Outflow = estimated operating costs. Select horizon below.</div>',unsafe_allow_html=True)
@@ -692,7 +722,7 @@ with tabs[6]:
                 html='<table class="cp-table"><tr><th>Date</th><th>Expected Inflow</th><th>Expected Outflow</th><th>Net Flow</th></tr>'
                 for row in cp[:hz]:
                     nc="cp-green" if row["Net"]>=0 else "cp-red"
-                    html+=f'<tr><td style="font-weight:500;font-family:IBM Plex Sans,sans-serif">{row["Date"]}</td><td class="cp-green">{fmtc(row["Inflow"],ccy)}</td><td class="cp-red">{fmtc(row["Outflow"],ccy)}</td><td class="{nc}">{fmtc(row["Net"],ccy)}</td></tr>'
+                    html+=f'<tr><td style="font-weight:500;font-family:Inter,sans-serif">{row["Date"]}</td><td class="cp-green">{fmtc(row["Inflow"],ccy)}</td><td class="cp-red">{fmtc(row["Outflow"],ccy)}</td><td class="{nc}">{fmtc(row["Net"],ccy)}</td></tr>'
                 html+='</table>'; st.markdown(html,unsafe_allow_html=True)
             st.markdown("</div>",unsafe_allow_html=True)
         # --- CollectIQ Dispute Resolution Engine ---
@@ -711,7 +741,7 @@ with tabs[6]:
                 st.markdown('<div style="font-size:0.8rem;font-weight:600;color:#64748b;margin-bottom:0.5rem">BY CATEGORY</div>',unsafe_allow_html=True)
                 for cat,cnt in dp["categories"].items():
                     pct=round(cnt/max(dp["total"],1)*100)
-                    st.markdown(f'<div style="margin-bottom:0.5rem"><div style="display:flex;justify-content:space-between;font-size:0.82rem;margin-bottom:3px"><span style="font-weight:500">{cat}</span><span style="font-family:IBM Plex Mono,monospace;font-weight:600">{cnt}</span></div><div class="progress-bar-bg"><div class="progress-bar-fill" style="width:{pct}%;background:#0369a1"></div></div></div>',unsafe_allow_html=True)
+                    st.markdown(f'<div style="margin-bottom:0.5rem"><div style="display:flex;justify-content:space-between;font-size:0.82rem;margin-bottom:3px"><span style="font-weight:500">{cat}</span><span style="font-family:JetBrains Mono,monospace;font-weight:600">{cnt}</span></div><div class="progress-bar-bg"><div class="progress-bar-fill" style="width:{pct}%;background:#0369a1"></div></div></div>',unsafe_allow_html=True)
             with dpr:
                 st.markdown('<div style="font-size:0.8rem;font-weight:600;color:#64748b;margin-bottom:0.5rem">DISPUTE QUEUE — AI RECOMMENDATIONS</div>',unsafe_allow_html=True)
                 for item in dp["items"][:6]:
@@ -721,7 +751,7 @@ with tabs[6]:
             st.markdown("</div>",unsafe_allow_html=True)
 
 # ==================== TAB 8: CASH APP & LTV ====================
-with tabs[7]:
+with tabs[4]:
     if not st.session_state.done: st.info("Upload data and Run Full Analysis.")
     else:
         ltv_df = st.session_state.ltv
@@ -752,7 +782,7 @@ with tabs[7]:
                     seg_bg={"Strategic":"#dcfce7","Growth":"#e0f2fe","At Risk":"#fef3c7","Monitor":"#f1f5f9"}
                     churn_cls="risk-high" if row["churn_risk"]=="High" else "risk-med" if row["churn_risk"]=="Medium" else "risk-low"
                     hc=scolor(row["health_score"])
-                    st.markdown(f'<div style="padding:0.6rem 0;border-bottom:1px solid #f1f5f9"><div style="display:flex;justify-content:space-between;align-items:center"><div><span style="font-weight:500;font-size:0.85rem">{row["Customer"]}</span> <span style="font-size:0.65rem;padding:2px 8px;border-radius:10px;background:{seg_bg.get(row["segment"],"#f1f5f9")};color:{seg_co.get(row["segment"],"#64748b")};font-weight:600">{row["segment"]}</span></div><div style="display:flex;align-items:center;gap:10px"><span style="font-family:IBM Plex Mono,monospace;font-size:0.85rem;font-weight:600">{fmtc(row["ltv_12m"],ccy)}</span><span style="font-family:IBM Plex Mono,monospace;font-size:0.78rem;color:{hc}">{int(row["health_score"])}</span><span class="risk-badge {churn_cls}">{row["churn_risk"]}</span></div></div><div style="display:flex;gap:16px;font-size:0.72rem;color:#94a3b8;margin-top:3px"><span>Orders: {int(row["order_count"])}</span><span>DSO: {row["avg_dso"]:.0f}d</span><span>Net margin: {row["net_margin_pct"]}%</span><span>Rev: {fmtc(row["total_revenue"],ccy)}</span></div></div>',unsafe_allow_html=True)
+                    st.markdown(f'<div style="padding:0.6rem 0;border-bottom:1px solid #f1f5f9"><div style="display:flex;justify-content:space-between;align-items:center"><div><span style="font-weight:500;font-size:0.85rem">{row["Customer"]}</span> <span style="font-size:0.65rem;padding:2px 8px;border-radius:10px;background:{seg_bg.get(row["segment"],"#f1f5f9")};color:{seg_co.get(row["segment"],"#64748b")};font-weight:600">{row["segment"]}</span></div><div style="display:flex;align-items:center;gap:10px"><span style="font-family:JetBrains Mono,monospace;font-size:0.85rem;font-weight:600">{fmtc(row["ltv_12m"],ccy)}</span><span style="font-family:JetBrains Mono,monospace;font-size:0.78rem;color:{hc}">{int(row["health_score"])}</span><span class="risk-badge {churn_cls}">{row["churn_risk"]}</span></div></div><div style="display:flex;gap:16px;font-size:0.72rem;color:#94a3b8;margin-top:3px"><span>Orders: {int(row["order_count"])}</span><span>DSO: {row["avg_dso"]:.0f}d</span><span>Net margin: {row["net_margin_pct"]}%</span><span>Rev: {fmtc(row["total_revenue"],ccy)}</span></div></div>',unsafe_allow_html=True)
                 st.markdown("</div>",unsafe_allow_html=True)
             with lt_r:
                 st.markdown('<div class="section-card"><div class="section-title">Customer Segmentation</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.75rem">Four-quadrant segmentation based on LTV and health score.</div>',unsafe_allow_html=True)
@@ -761,7 +791,7 @@ with tabs[7]:
                     cnt = seg_counts.get(seg,0); pct = round(cnt/max(len(ltv_df),1)*100)
                     seg_co2={"Strategic":"#16a34a","Growth":"#0369a1","At Risk":"#f59e0b","Monitor":"#94a3b8"}
                     seg_desc={"Strategic":"High LTV + strong health — protect and grow","Growth":"Healthy engagement, room for revenue growth","At Risk":"High revenue but deteriorating health signals","Monitor":"Low LTV + low engagement — review cost-to-serve"}
-                    st.markdown(f'<div style="margin-bottom:0.75rem"><div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:3px"><span style="font-weight:500">{seg}</span><span style="font-family:IBM Plex Mono,monospace;font-weight:600">{cnt} ({pct}%)</span></div><div class="progress-bar-bg"><div class="progress-bar-fill" style="width:{pct}%;background:{seg_co2.get(seg,"#94a3b8")}"></div></div><div style="font-size:0.7rem;color:#94a3b8;margin-top:2px">{seg_desc.get(seg,"")}</div></div>',unsafe_allow_html=True)
+                    st.markdown(f'<div style="margin-bottom:0.75rem"><div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:3px"><span style="font-weight:500">{seg}</span><span style="font-family:JetBrains Mono,monospace;font-weight:600">{cnt} ({pct}%)</span></div><div class="progress-bar-bg"><div class="progress-bar-fill" style="width:{pct}%;background:{seg_co2.get(seg,"#94a3b8")}"></div></div><div style="font-size:0.7rem;color:#94a3b8;margin-top:2px">{seg_desc.get(seg,"")}</div></div>',unsafe_allow_html=True)
                 st.markdown("</div>",unsafe_allow_html=True)
                 st.markdown('<div class="section-card"><div class="section-title">Churn Risk Alerts</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.75rem">Customers flagged for proactive outreach. Triggers: declining order frequency, extended DSO, rising disputes.</div>',unsafe_allow_html=True)
                 at_risk = ltv_df[ltv_df["churn_risk"].isin(["High","Medium"])].head(5)
@@ -781,5 +811,5 @@ with tabs[7]:
                 for item in ca["items"][:10]:
                     conf_co = "#16a34a" if item["Confidence"] >= 80 else "#f59e0b" if item["Confidence"] >= 45 else "#dc2626"
                     st_cls = "risk-low" if item["Match_Status"] == "Auto-Matched" else "risk-med" if item["Match_Status"] == "Review Required" else "risk-high"
-                    st.markdown(f'<div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid #f1f5f9"><div><span style="font-weight:500;font-size:0.82rem">{item["Order_ID"]}</span> <span style="font-size:0.72rem;color:#94a3b8">· {item["Customer"]}</span><div style="font-size:0.72rem;color:#64748b;margin-top:2px">Invoice: {fmtc(item["Invoice_Amount_USD"],ccy)} → Remit: {fmtc(item["Remittance_Amount"],ccy)} · {item["Match_Method"]}</div></div><div style="display:flex;align-items:center;gap:8px"><span style="font-family:IBM Plex Mono,monospace;font-size:0.82rem;color:{conf_co};font-weight:600">{item["Confidence"]}%</span><span class="risk-badge {st_cls}">{item["Match_Status"]}</span></div></div>',unsafe_allow_html=True)
+                    st.markdown(f'<div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid #f1f5f9"><div><span style="font-weight:500;font-size:0.82rem">{item["Order_ID"]}</span> <span style="font-size:0.72rem;color:#94a3b8">· {item["Customer"]}</span><div style="font-size:0.72rem;color:#64748b;margin-top:2px">Invoice: {fmtc(item["Invoice_Amount_USD"],ccy)} → Remit: {fmtc(item["Remittance_Amount"],ccy)} · {item["Match_Method"]}</div></div><div style="display:flex;align-items:center;gap:8px"><span style="font-family:JetBrains Mono,monospace;font-size:0.82rem;color:{conf_co};font-weight:600">{item["Confidence"]}%</span><span class="risk-badge {st_cls}">{item["Match_Status"]}</span></div></div>',unsafe_allow_html=True)
                 st.markdown("</div>",unsafe_allow_html=True)
