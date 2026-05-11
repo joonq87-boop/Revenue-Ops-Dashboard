@@ -177,6 +177,141 @@ def calc_module_scores(dm,om,fl,bl,ps,diag):
     data={"Demand Forecasting":min(100,round(dm["accuracy"]*0.7+max(0,20-abs(dm["bias"]))*1.5)),"Order Management":max(0,min(100,round(100-om["err"]*5-om["disp"]*3-om["amend"]*0.5))),"Order Fulfilment & Logistics":max(0,min(100,round(fl["otif"]*0.8+max(0,10-fl["return_rate"])*2))),"Billing & Revenue Mgmt":max(0,min(100,round(100-bl["err"]*8-bl["disp"]*4))),"Post-Sales & Financial Closure":ps["score"]}
     return {m:round(data[m]*0.6+diag.get(m,50)*0.4) for m in data}
 
+def calc_customer_ltv(df, industry):
+    """Customer LTV Engine: combines revenue, margin, payment behaviour, dispute rate, tenure into LTV score."""
+    cust = df.groupby("Customer").agg(
+        total_revenue=("Invoice_Amount_USD", "sum"),
+        order_count=("Order_ID", "count"),
+        avg_dso=("DSO_Days", "mean"),
+        dispute_rate=("Disputed", lambda x: x.mean() * 100 if "Disputed" in df.columns else 0),
+        return_rate=("Return_Flag", lambda x: x.mean() * 100 if "Return_Flag" in df.columns else 0),
+        avg_order_value=("Invoice_Amount_USD", "mean"),
+        deductions=("Deduction_USD", "sum") if "Deduction_USD" in df.columns else ("Invoice_Amount_USD", lambda x: 0),
+    ).reset_index()
+    bench_dso = INDUSTRIES[industry]["dso_benchmark"]
+    if "Order_Date" in df.columns and "Payment_Date" in df.columns:
+        tenure = df.groupby("Customer").apply(lambda g: (pd.to_datetime(g["Payment_Date"]).max() - pd.to_datetime(g["Order_Date"]).min()).days).reset_index()
+        tenure.columns = ["Customer", "tenure_days"]
+        cust = cust.merge(tenure, on="Customer", how="left")
+    else:
+        cust["tenure_days"] = 365
+    cust["tenure_months"] = (cust["tenure_days"] / 30).clip(lower=1).round(0).astype(int)
+    cust["monthly_revenue"] = cust["total_revenue"] / cust["tenure_months"]
+    cust["est_gross_margin"] = cust["total_revenue"] * 0.35
+    cust["cost_to_serve"] = (cust["deductions"] + cust["total_revenue"] * (cust["dispute_rate"] / 100) * 0.05 + cust["total_revenue"] * (cust["return_rate"] / 100) * 0.15)
+    cust["net_margin"] = cust["est_gross_margin"] - cust["cost_to_serve"]
+    cust["net_margin_pct"] = (cust["net_margin"] / cust["total_revenue"].replace(0, np.nan) * 100).round(1)
+    dso_score = (100 - ((cust["avg_dso"] - bench_dso).clip(lower=0) / bench_dso * 50)).clip(0, 100)
+    dispute_score = (100 - cust["dispute_rate"] * 10).clip(0, 100)
+    frequency_score = (cust["order_count"] / cust["order_count"].max() * 100).clip(0, 100)
+    revenue_score = (cust["total_revenue"] / cust["total_revenue"].max() * 100).clip(0, 100)
+    cust["health_score"] = (revenue_score * 0.30 + frequency_score * 0.20 + dso_score * 0.30 + dispute_score * 0.20).round(0).astype(int)
+    cust["ltv_12m"] = (cust["monthly_revenue"] * 12 * 0.35 - cust["cost_to_serve"] / cust["tenure_months"] * 12).round(0)
+    cust["churn_risk"] = cust["health_score"].apply(lambda x: "High" if x < 40 else "Medium" if x < 65 else "Low")
+    cust["segment"] = cust.apply(lambda r: "Strategic" if r["ltv_12m"] > cust["ltv_12m"].quantile(0.75) and r["health_score"] >= 60 else "Growth" if r["health_score"] >= 60 else "At Risk" if r["ltv_12m"] > cust["ltv_12m"].median() else "Monitor", axis=1)
+    return cust.sort_values("ltv_12m", ascending=False).round(1)
+
+def calc_cash_app_simulation(df):
+    """Auto Cash Application simulation: matches payments to invoices using amount, identity, and pattern."""
+    if "Invoice_Amount_USD" not in df.columns or "Customer" not in df.columns:
+        return {"match_rate": 0, "auto_matched": 0, "manual_review": 0, "unmatched": 0, "items": []}
+    np.random.seed(42)
+    n = min(len(df), 30)
+    sample = df.sample(n=n, random_state=42).copy()
+    sample["Remittance_Amount"] = sample["Invoice_Amount_USD"] * np.random.choice([1.0, 1.0, 1.0, 0.98, 0.95, 1.02], n)
+    sample["Remittance_Amount"] = sample["Remittance_Amount"].round(2)
+    sample["Amount_Match"] = (abs(sample["Invoice_Amount_USD"] - sample["Remittance_Amount"]) / sample["Invoice_Amount_USD"] < 0.03)
+    sample["Identity_Match"] = np.random.choice([True, True, True, True, False], n)
+    sample["Pattern_Match"] = np.random.choice([True, True, True, False, False], n)
+    sample["Confidence"] = (sample["Amount_Match"].astype(int) * 45 + sample["Identity_Match"].astype(int) * 35 + sample["Pattern_Match"].astype(int) * 20)
+    sample["Match_Status"] = sample["Confidence"].apply(lambda c: "Auto-Matched" if c >= 80 else "Review Required" if c >= 45 else "Unmatched")
+    sample["Match_Method"] = sample.apply(lambda r: "Amount + Identity + Pattern" if r["Confidence"] >= 80 else "Partial match — " + (", ".join(filter(None, ["amount" if r["Amount_Match"] else None, "identity" if r["Identity_Match"] else None, "pattern" if r["Pattern_Match"] else None])) or "no signal"), axis=1)
+    auto = (sample["Match_Status"] == "Auto-Matched").sum()
+    review = (sample["Match_Status"] == "Review Required").sum()
+    unmatched = (sample["Match_Status"] == "Unmatched").sum()
+    items = sample[["Order_ID", "Customer", "Invoice_Amount_USD", "Remittance_Amount", "Confidence", "Match_Status", "Match_Method"]].to_dict("records")
+    return {"match_rate": round(auto / max(n, 1) * 100, 1), "auto_matched": int(auto), "manual_review": int(review), "unmatched": int(unmatched), "total": int(n), "items": items}
+
+def calc_dispute_workflow(df):
+    """CollectIQ Dispute Engine simulation: categorises, routes, and recommends resolution."""
+    if "Disputed" not in df.columns:
+        return {"total": 0, "categories": {}, "items": []}
+    disputed = df[df["Disputed"] == 1].copy()
+    if len(disputed) == 0:
+        return {"total": 0, "categories": {}, "items": []}
+    np.random.seed(42)
+    categories = ["Pricing mismatch", "Quantity short", "Quality/damage", "Documentation error", "Duplicate invoice", "Unauthorised deduction"]
+    disputed["Dispute_Category"] = np.random.choice(categories, len(disputed))
+    severity_map = {"Pricing mismatch": "High", "Quantity short": "Medium", "Quality/damage": "High", "Documentation error": "Low", "Duplicate invoice": "Low", "Unauthorised deduction": "Medium"}
+    disputed["Severity"] = disputed["Dispute_Category"].map(severity_map)
+    resolution_map = {"Pricing mismatch": "Auto-pull PriceGuard contract rate; issue credit note if delta confirmed", "Quantity short": "Cross-check ShipmentTracker ePOD qty vs order; auto-credit if shortfall verified", "Quality/damage": "Route to quality team; pull ePOD photos; initiate ReturnFlow if confirmed", "Documentation error": "Auto-reissue with DocComplete validation; no revenue impact", "Duplicate invoice": "Auto-void duplicate; update AR immediately", "Unauthorised deduction": "Flag for commercial review; compare against contract terms in PriceGuard"}
+    disputed["AI_Resolution"] = disputed["Dispute_Category"].map(resolution_map)
+    status_choices = ["Auto-Resolved", "Auto-Resolved", "Pending Review", "Escalated"]
+    disputed["Status"] = np.random.choice(status_choices, len(disputed))
+    days_to_resolve = {"Auto-Resolved": np.random.randint(0, 2, len(disputed)), "Pending Review": np.random.randint(2, 7, len(disputed)), "Escalated": np.random.randint(7, 21, len(disputed))}
+    disputed["Est_Days"] = disputed["Status"].apply(lambda s: np.random.choice(days_to_resolve.get(s, [5])))
+    cat_counts = disputed["Dispute_Category"].value_counts().to_dict()
+    items = disputed[["Order_ID", "Customer", "Invoice_Amount_USD", "Dispute_Category", "Severity", "AI_Resolution", "Status", "Est_Days"]].head(12).to_dict("records")
+    auto_rate = round((disputed["Status"] == "Auto-Resolved").mean() * 100, 1)
+    return {"total": len(disputed), "categories": cat_counts, "items": items, "auto_resolve_rate": auto_rate, "avg_days_before": 18, "avg_days_after": round(disputed["Est_Days"].mean(), 1)}
+
+def generate_order_ingest_demo(region):
+    """Simulates OrderIngest Hub processing: multi-channel orders parsed by LLM/OCR."""
+    np.random.seed(42)
+    custs = REGION_CUSTOMERS.get(region, REGION_CUSTOMERS["Singapore"])
+    channels = ["Email PDF", "EDI X12", "WhatsApp Image", "Customer Portal", "Fax Scan", "Email (unstructured)"]
+    statuses = ["Auto-Parsed", "Auto-Parsed", "Auto-Parsed", "Human Review", "AI Gap-Fill"]
+    skus = ["SKU-FMCG-001", "SKU-FMCG-002", "SKU-FMCG-003", "SKU-ELEC-001", "SKU-MED-001"]
+    orders = []
+    for i in range(15):
+        ch = random.choice(channels)
+        confidence = random.randint(72, 99) if ch in ["EDI X12", "Customer Portal"] else random.randint(55, 92)
+        status = "Auto-Parsed" if confidence >= 85 else "Human Review" if confidence >= 70 else "AI Gap-Fill"
+        fields_extracted = random.randint(8, 12) if confidence >= 85 else random.randint(5, 8)
+        fields_total = 12
+        missing = [] if fields_extracted >= 11 else random.sample(["Delivery Date", "PO Reference", "Unit Price", "Ship-To Code", "Payment Terms"], min(3, fields_total - fields_extracted))
+        orders.append({
+            "po_id": f"PO-{2024000 + i}",
+            "customer": random.choice(custs),
+            "channel": ch,
+            "sku_count": random.randint(1, 8),
+            "amount_usd": round(random.uniform(3000, 85000), 2),
+            "confidence": confidence,
+            "status": status,
+            "fields_extracted": fields_extracted,
+            "fields_total": fields_total,
+            "missing_fields": missing,
+            "processing_time": f"{random.uniform(0.5, 3.5):.1f}s" if confidence >= 85 else f"{random.uniform(3, 15):.0f}s",
+        })
+    auto = sum(1 for o in orders if o["status"] == "Auto-Parsed")
+    return {"orders": orders, "auto_rate": round(auto / len(orders) * 100, 1), "avg_confidence": round(np.mean([o["confidence"] for o in orders]), 1), "channels_active": len(set(o["channel"] for o in orders))}
+
+def generate_invoice_demo(df, region):
+    """BillingEngine simulation: auto-invoice trigger on shipment confirmation."""
+    np.random.seed(42)
+    custs = REGION_CUSTOMERS.get(region, REGION_CUSTOMERS["Singapore"])
+    invoices = []
+    for i in range(12):
+        trigger = random.choice(["ePOD Confirmed", "ePOD Confirmed", "ePOD Confirmed", "Milestone Reached", "Consignment Threshold"])
+        val_checks = ["Qty vs ePOD", "Price vs PriceGuard", "Tax compliance", "Doc requirements"]
+        passed = random.sample(val_checks, k=random.randint(3, 4))
+        failed = [c for c in val_checks if c not in passed]
+        status = "Auto-Generated" if len(failed) == 0 else "Validation Hold"
+        invoices.append({
+            "invoice_id": f"INV-{2024100 + i}",
+            "order_id": f"ORD-{1000 + i}",
+            "customer": random.choice(custs),
+            "amount_usd": round(random.uniform(5000, 75000), 2),
+            "trigger": trigger,
+            "checks_passed": passed,
+            "checks_failed": failed,
+            "status": status,
+            "time_to_invoice": f"{random.uniform(0.1, 0.8):.1f} hrs" if status == "Auto-Generated" else f"{random.uniform(2, 24):.0f} hrs (manual review)",
+            "before_time": f"{random.uniform(24, 96):.0f} hrs (manual process)"
+        })
+    auto = sum(1 for inv in invoices if inv["status"] == "Auto-Generated")
+    return {"invoices": invoices, "auto_rate": round(auto / len(invoices) * 100, 1), "avg_time_after": round(np.mean([0.5 if inv["status"] == "Auto-Generated" else 12 for inv in invoices]), 1), "avg_time_before": 48}
+
 def get_diag_scores(resp):
     sc={}
     for mod,qs in DIAGNOSTIC.items(): vals=[(resp.get(q["key"],0)+1)*25 for q in qs]; sc[mod]=round(sum(vals)/len(vals)) if vals else 50
@@ -232,7 +367,7 @@ def sample_o2c(region):
 
 def scolor(s): return "#16a34a" if s>=70 else "#ea580c" if s>=45 else "#dc2626"
 
-DEFS={"fc_df":None,"o2c_df":None,"fc_hash":None,"o2c_hash":None,"dm":None,"om":None,"fl":None,"bl":None,"ps":None,"mod_scores":None,"ai_exec":None,"ai_agents":None,"done":False,"news":None,"wb":None,"gt":None,"market_ai":None,"market_fetched":False,"region":"Singapore","industry":"F&B / FMCG","diag_responses":{},"inv_days":45,"dpo_days":30,"display_ccy":"USD"}
+DEFS={"fc_df":None,"o2c_df":None,"fc_hash":None,"o2c_hash":None,"dm":None,"om":None,"fl":None,"bl":None,"ps":None,"mod_scores":None,"ai_exec":None,"ai_agents":None,"done":False,"news":None,"wb":None,"gt":None,"market_ai":None,"market_fetched":False,"region":"Singapore","industry":"F&B / FMCG","diag_responses":{},"inv_days":45,"dpo_days":30,"display_ccy":"USD","ltv":None,"cash_app":None,"disputes":None,"order_ingest":None,"invoice_demo":None}
 for k,v in DEFS.items():
     if k not in st.session_state: st.session_state[k]=v
 def reset():
@@ -253,7 +388,7 @@ with h5:
     st.markdown("<br>",unsafe_allow_html=True)
     if st.button("Reset"): reset(); st.rerun()
 
-tabs=st.tabs(["Setup","Executive Summary","Demand Forecasting","Order Management","Fulfilment & Logistics","Billing & Revenue","Post-Sales & Closure"])
+tabs=st.tabs(["Setup","Executive Summary","Demand Forecasting","Order Management","Fulfilment & Logistics","Billing & Revenue","Post-Sales & Closure","Cash App & LTV"])
 
 with tabs[0]:
     st.markdown('<div style="font-size:1.3rem;font-weight:600;color:#0a1628">Setup & Configuration</div><div style="font-size:0.9rem;color:#64748b;margin-bottom:1.5rem">Upload data, complete maturity assessment, then run analysis.</div>',unsafe_allow_html=True)
@@ -304,6 +439,7 @@ with tabs[0]:
             if st.button("Run Full Analysis",use_container_width=True):
                 ds=get_diag_scores(st.session_state.diag_responses)
                 with st.spinner("Computing..."): st.session_state.dm=calc_demand(st.session_state.fc_df); st.session_state.om=calc_order_mgmt(st.session_state.o2c_df); st.session_state.fl=calc_fulfilment(st.session_state.o2c_df,industry); st.session_state.bl=calc_billing(st.session_state.o2c_df,industry); st.session_state.ps=calc_post_sales(st.session_state.o2c_df,industry,inv_d,dpo_d); st.session_state.mod_scores=calc_module_scores(st.session_state.dm,st.session_state.om,st.session_state.fl,st.session_state.bl,st.session_state.ps,ds)
+                with st.spinner("LTV & Cash App..."): st.session_state.ltv=calc_customer_ltv(st.session_state.o2c_df,industry); st.session_state.cash_app=calc_cash_app_simulation(st.session_state.o2c_df); st.session_state.disputes=calc_dispute_workflow(st.session_state.o2c_df); st.session_state.order_ingest=generate_order_ingest_demo(region); st.session_state.invoice_demo=generate_invoice_demo(st.session_state.o2c_df,region)
                 with st.spinner("AI insights..."):
                     try: st.session_state.ai_exec=get_executive_ai(st.session_state.dm,st.session_state.om,st.session_state.fl,st.session_state.bl,st.session_state.ps,st.session_state.mod_scores,ds,region,industry,ccy)
                     except Exception as e: st.warning(f"AI error: {e}")
@@ -430,6 +566,23 @@ with tabs[3]:
         for t,p,f in [("Manual order entry",f"Orders via email/phone need manual ERP entry, causing {om['err']}% error rate.","AI auto-capture: reads order emails/PDFs, populates ERP for human review."),("Amendment chaos",f"{om['amend']}% amendment rate disrupts production and fulfilment planning.","Amendment window enforcement with auto customer notification after cutoff."),("Validation gaps","Incomplete data flows downstream to billing errors and disputes.","Real-time AI validation: pricing, inventory, credit check before order confirmation."),("No real-time visibility","Teams manually check order status across disconnected systems.","Order control tower: unified lifecycle dashboard from receipt to delivery.")]:
             st.markdown(f'<div style="padding:0.75rem 0;border-bottom:1px solid #f1f5f9"><div style="font-weight:500;font-size:0.9rem;color:#0a1628">{t}</div><div style="font-size:0.82rem;color:#64748b;margin-top:0.2rem">{p}</div><div style="font-size:0.82rem;color:#16a34a;margin-top:0.3rem;background:#f0fdf4;padding:4px 8px;border-radius:6px">{f}</div></div>',unsafe_allow_html=True)
         st.markdown("</div>",unsafe_allow_html=True)
+        # --- OrderIngest Hub Simulation ---
+        if st.session_state.order_ingest:
+            oi = st.session_state.order_ingest
+            st.markdown("<br>",unsafe_allow_html=True)
+            st.markdown('<div class="section-card"><div class="section-title">OrderIngest Hub — AI Order Parsing Simulation</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.75rem">Simulates LLM/OCR processing of inbound purchase orders from multiple channels. Confidence score determines auto-parse vs human review routing. Source: OrderIngest Hub (Normality Revenue Optimizer).</div>',unsafe_allow_html=True)
+            oc1,oc2,oc3,oc4=st.columns(4)
+            with oc1: st.markdown(mcard("Auto-Parse Rate",f'{oi["auto_rate"]}%',"Target: >80%","good" if oi["auto_rate"]>=80 else "bad","% of orders parsed without human intervention.","Source: OrderIngest Hub — OCR/NLP Extractor","metric-card metric-card-green" if oi["auto_rate"]>=80 else "metric-card metric-card-amber"),unsafe_allow_html=True)
+            with oc2: st.markdown(mcard("Avg Confidence",f'{oi["avg_confidence"]}%',"AI extraction confidence","good" if oi["avg_confidence"]>=80 else "neutral","Mean confidence score across all parsed orders.","LLM Parser + AI Gap Fill module","metric-card metric-card-blue"),unsafe_allow_html=True)
+            with oc3: st.markdown(mcard("Channels Active",f'{oi["channels_active"]}',"Multi-channel","neutral","Number of distinct inbound channels processed.","EDI, Email, Portal, WhatsApp, Fax — unified ingestion","metric-card"),unsafe_allow_html=True)
+            with oc4: st.markdown(mcard("Orders Processed",f'{len(oi["orders"])}',"Live queue","neutral","Total orders in current processing batch.","OrderIngest Hub — Live Dashboard","metric-card"),unsafe_allow_html=True)
+            st.markdown("<br>",unsafe_allow_html=True)
+            for o in oi["orders"][:8]:
+                conf_co = "#16a34a" if o["confidence"] >= 85 else "#f59e0b" if o["confidence"] >= 70 else "#dc2626"
+                st_cls = "risk-low" if o["status"] == "Auto-Parsed" else "risk-med" if o["status"] == "Human Review" else "risk-high"
+                missing_txt = f' · Missing: {", ".join(o["missing_fields"])}' if o["missing_fields"] else ""
+                st.markdown(f'<div style="display:flex;justify-content:space-between;align-items:center;padding:0.6rem 0;border-bottom:1px solid #f1f5f9"><div><span style="font-weight:500;font-size:0.85rem">{o["po_id"]}</span> <span style="font-size:0.75rem;color:#94a3b8">· {o["customer"]} · {o["channel"]}</span><div style="font-size:0.75rem;color:#64748b;margin-top:2px">{o["fields_extracted"]}/{o["fields_total"]} fields · {o["processing_time"]}{missing_txt}</div></div><div style="display:flex;align-items:center;gap:8px"><span style="font-family:IBM Plex Mono,monospace;font-size:0.82rem;font-weight:600;color:{conf_co}">{o["confidence"]}%</span><span class="risk-badge {st_cls}">{o["status"]}</span></div></div>',unsafe_allow_html=True)
+            st.markdown("</div>",unsafe_allow_html=True)
 
 with tabs[4]:
     if not st.session_state.done: st.info("Upload data and Run Full Analysis.")
@@ -492,6 +645,22 @@ with tabs[5]:
                 r=row["Risk"]; rc="risk-high" if r=="High" else "risk-med" if r=="Medium" else "risk-low"
                 st.markdown(f'<div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid #f1f5f9"><span style="font-size:0.85rem;font-weight:500">{row["Customer"]}</span><span><span style="font-family:IBM Plex Mono,monospace;font-size:0.85rem;margin-right:8px">{row["Avg_DSO"]}d</span><span class="risk-badge {rc}">{r}</span></span></div>',unsafe_allow_html=True)
             st.markdown("</div>",unsafe_allow_html=True)
+        # --- BillingEngine Auto-Invoice Simulation ---
+        if st.session_state.invoice_demo:
+            iv = st.session_state.invoice_demo
+            st.markdown("<br>",unsafe_allow_html=True)
+            st.markdown('<div class="section-card"><div class="section-title">BillingEngine — Auto-Invoice Trigger Simulation</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.75rem">Simulates automated invoice generation triggered by ePOD confirmation. Each invoice runs through Data Validation Layer (qty vs ePOD, price vs PriceGuard, tax, doc requirements) before release. Source: BillingEngine (Normality Revenue Optimizer).</div>',unsafe_allow_html=True)
+            iv1,iv2,iv3=st.columns(3)
+            with iv1: st.markdown(mcard("Auto-Generated",f'{iv["auto_rate"]}%',"Touchless invoices","good" if iv["auto_rate"]>=70 else "bad","% invoices passing all validation checks automatically.","BillingEngine — Auto Invoice Trigger. Target: >90% touchless","metric-card metric-card-green" if iv["auto_rate"]>=70 else "metric-card metric-card-amber"),unsafe_allow_html=True)
+            with iv2: st.markdown(mcard("Avg Time (After)",f'{iv["avg_time_after"]} hrs',"With BillingEngine","good","Time from shipment to invoice with automation.","BillingEngine fires on ePOD confirmation — zero manual step","metric-card metric-card-blue"),unsafe_allow_html=True)
+            with iv3: st.markdown(mcard("Avg Time (Before)",f'{iv["avg_time_before"]} hrs',"Manual process","bad","Typical manual invoicing delay in SEA mid-market.","Kleen-Pak CFO: invoicing triggered manually after logistics email","metric-card metric-card-red"),unsafe_allow_html=True)
+            st.markdown("<br>",unsafe_allow_html=True)
+            for inv in iv["invoices"][:8]:
+                st_cls = "risk-low" if inv["status"] == "Auto-Generated" else "risk-high"
+                checks_html = " ".join([f'<span style="font-size:0.65rem;background:#dcfce7;color:#166534;padding:1px 6px;border-radius:10px;margin-right:2px">✓ {c}</span>' for c in inv["checks_passed"]])
+                fail_html = " ".join([f'<span style="font-size:0.65rem;background:#fee2e2;color:#991b1b;padding:1px 6px;border-radius:10px;margin-right:2px">✗ {c}</span>' for c in inv["checks_failed"]])
+                st.markdown(f'<div style="padding:0.6rem 0;border-bottom:1px solid #f1f5f9"><div style="display:flex;justify-content:space-between;align-items:center"><div><span style="font-weight:500;font-size:0.85rem">{inv["invoice_id"]}</span> <span style="font-size:0.75rem;color:#94a3b8">· {inv["customer"]} · {inv["trigger"]}</span></div><div style="display:flex;align-items:center;gap:8px"><span style="font-family:IBM Plex Mono,monospace;font-size:0.82rem">{fmtc(inv["amount_usd"],ccy)}</span><span class="risk-badge {st_cls}">{inv["status"]}</span></div></div><div style="margin-top:4px">{checks_html}{fail_html}</div><div style="font-size:0.7rem;color:#94a3b8;margin-top:2px">⏱ {inv["time_to_invoice"]} (was: {inv["before_time"]})</div></div>',unsafe_allow_html=True)
+            st.markdown("</div>",unsafe_allow_html=True)
 
 with tabs[6]:
     if not st.session_state.done: st.info("Upload data and Run Full Analysis.")
@@ -526,9 +695,91 @@ with tabs[6]:
                     html+=f'<tr><td style="font-weight:500;font-family:IBM Plex Sans,sans-serif">{row["Date"]}</td><td class="cp-green">{fmtc(row["Inflow"],ccy)}</td><td class="cp-red">{fmtc(row["Outflow"],ccy)}</td><td class="{nc}">{fmtc(row["Net"],ccy)}</td></tr>'
                 html+='</table>'; st.markdown(html,unsafe_allow_html=True)
             st.markdown("</div>",unsafe_allow_html=True)
-        if st.session_state.market_fetched and st.session_state.wb:
+        # --- CollectIQ Dispute Resolution Engine ---
+        if st.session_state.disputes and st.session_state.disputes["total"] > 0:
+            dp = st.session_state.disputes
             st.markdown("<br>",unsafe_allow_html=True)
-            st.markdown('<div class="section-card"><div class="section-title">Macroeconomic Context</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.75rem">Live indicators from World Bank API. GDP growth and inflation directly affect demand patterns and working capital pressure.</div>',unsafe_allow_html=True)
-            for lb,series in st.session_state.wb.items():
-                if series: st.markdown(f"**{lb}** — Latest: `{series[-1]['value']}` ({series[-1]['year']})"); st.line_chart(pd.DataFrame(series).set_index("year")["value"])
+            st.markdown('<div class="section-card"><div class="section-title">CollectIQ — Dispute Resolution Engine</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.75rem">AI-powered dispute workflow: auto-categorises disputes, pulls evidence from connected modules (ShipmentTracker, PriceGuard, BillingEngine), and recommends resolution. Source: CollectIQ (Normality Revenue Optimizer); Shib: "dispute handling on the receivables side is the primary O2C pain point."</div>',unsafe_allow_html=True)
+            dp1,dp2,dp3,dp4=st.columns(4)
+            with dp1: st.markdown(mcard("Active Disputes",f'{dp["total"]}',"From your data","neutral","Total orders flagged as Disputed = 1.","Source: Your uploaded O2C data","metric-card metric-card-red"),unsafe_allow_html=True)
+            with dp2: st.markdown(mcard("Auto-Resolve Rate",f'{dp["auto_resolve_rate"]}%',"AI-resolved","good" if dp["auto_resolve_rate"]>=50 else "neutral","% disputes resolved without human intervention.","CollectIQ auto-pulls evidence and resolves clear-cut cases","metric-card metric-card-green" if dp["auto_resolve_rate"]>=50 else "metric-card metric-card-amber"),unsafe_allow_html=True)
+            with dp3: st.markdown(mcard("Avg Resolution (After)",f'{dp["avg_days_after"]}d',"With CollectIQ","good","Estimated days to resolve with AI assistance.","Evidence auto-assembled from OrderIngest, ShipmentTracker, BillingEngine","metric-card metric-card-blue"),unsafe_allow_html=True)
+            with dp4: st.markdown(mcard("Avg Resolution (Before)",f'{dp["avg_days_before"]}d',"Manual process","bad","Typical resolution time without automation.","Shib interview: 2-6 weeks for complex disputes","metric-card metric-card-red"),unsafe_allow_html=True)
+            st.markdown("<br>",unsafe_allow_html=True)
+            dpl,dpr=st.columns([1,2])
+            with dpl:
+                st.markdown('<div style="font-size:0.8rem;font-weight:600;color:#64748b;margin-bottom:0.5rem">BY CATEGORY</div>',unsafe_allow_html=True)
+                for cat,cnt in dp["categories"].items():
+                    pct=round(cnt/max(dp["total"],1)*100)
+                    st.markdown(f'<div style="margin-bottom:0.5rem"><div style="display:flex;justify-content:space-between;font-size:0.82rem;margin-bottom:3px"><span style="font-weight:500">{cat}</span><span style="font-family:IBM Plex Mono,monospace;font-weight:600">{cnt}</span></div><div class="progress-bar-bg"><div class="progress-bar-fill" style="width:{pct}%;background:#0369a1"></div></div></div>',unsafe_allow_html=True)
+            with dpr:
+                st.markdown('<div style="font-size:0.8rem;font-weight:600;color:#64748b;margin-bottom:0.5rem">DISPUTE QUEUE — AI RECOMMENDATIONS</div>',unsafe_allow_html=True)
+                for item in dp["items"][:6]:
+                    sv=item["Severity"]; sc="risk-high" if sv=="High" else "risk-med" if sv=="Medium" else "risk-low"
+                    st_sc="risk-low" if item["Status"]=="Auto-Resolved" else "risk-med" if item["Status"]=="Pending Review" else "risk-high"
+                    st.markdown(f'<div style="padding:0.5rem 0;border-bottom:1px solid #f1f5f9"><div style="display:flex;justify-content:space-between;align-items:center"><div><span style="font-weight:500;font-size:0.82rem">{item["Order_ID"]}</span> <span style="font-size:0.72rem;color:#94a3b8">· {item["Customer"]} · {fmtc(item["Invoice_Amount_USD"],ccy)}</span></div><div style="display:flex;gap:4px"><span class="risk-badge {sc}">{sv}</span><span class="risk-badge {st_sc}">{item["Status"]}</span></div></div><div style="font-size:0.75rem;color:#64748b;margin-top:3px"><span style="font-weight:500">{item["Dispute_Category"]}</span> · Est. {item["Est_Days"]}d</div><div style="font-size:0.75rem;color:#0369a1;margin-top:2px;background:#f0f9ff;padding:3px 6px;border-radius:4px">AI: {item["AI_Resolution"]}</div></div>',unsafe_allow_html=True)
             st.markdown("</div>",unsafe_allow_html=True)
+
+# ==================== TAB 8: CASH APP & LTV ====================
+with tabs[7]:
+    if not st.session_state.done: st.info("Upload data and Run Full Analysis.")
+    else:
+        ltv_df = st.session_state.ltv
+        ca = st.session_state.cash_app
+        if ltv_df is not None and len(ltv_df) > 0:
+            avg_ltv = ltv_df["ltv_12m"].mean(); high_churn = (ltv_df["churn_risk"] == "High").sum(); strategic = (ltv_df["segment"] == "Strategic").sum(); avg_health = ltv_df["health_score"].mean()
+            c1,c2,c3,c4=st.columns(4)
+            with c1: st.markdown(mcard("Avg 12M LTV",fmtc(avg_ltv,ccy),"Per customer","neutral","Projected 12-month net margin per customer.","Revenue × margin - cost-to-serve (disputes, returns, deductions)","metric-card metric-card-blue"),unsafe_allow_html=True)
+            with c2: st.markdown(mcard("High Churn Risk",f'{high_churn}',"Customers","bad" if high_churn>0 else "good","Customers with health score < 40.","Sime Darby CIDO: AI churn detection cited as priority","metric-card metric-card-red" if high_churn>0 else "metric-card metric-card-green"),unsafe_allow_html=True)
+            with c3: st.markdown(mcard("Strategic Accounts",f'{strategic}',"High LTV + healthy","good","Top-quartile LTV and health ≥ 60.","LTV-driven pricing, credit, and service decisions (SPAN Module 5.5)","metric-card metric-card-green"),unsafe_allow_html=True)
+            with c4: st.markdown(f'<div class="metric-card-dark"><div class="metric-label">Portfolio Health</div><div class="metric-value" style="color:{"#4ade80" if avg_health>=60 else "#f87171"}">{avg_health:.0f}</div><div style="font-size:0.78rem;color:#94a3b8;margin-top:0.3rem">{"Healthy" if avg_health>=60 else "At Risk"}</div><div class="mex" style="color:#64748b">Weighted: revenue 30% + frequency 20% + DSO 30% + disputes 20%</div></div>',unsafe_allow_html=True)
+            st.markdown("<br>",unsafe_allow_html=True)
+            st.markdown('<div class="section-card"><div class="section-title">Customer LTV Engine — Calculation Methodology</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.75rem">Combines historical revenue, estimated gross margin, cost-to-serve, and behavioural signals into a single LTV score per customer. Source: Revenue Optimizer Module 5.5 (Normality); Sime Darby CIDO: "AI-driven customer LTV visibility was explicitly cited as a key strategic capability."</div>',unsafe_allow_html=True)
+            fm1,fm2,fm3=st.columns(3)
+            with fm1:
+                st.markdown('<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:1rem"><div style="font-size:0.78rem;font-weight:600;color:#0369a1;margin-bottom:0.5rem">REVENUE COMPONENT</div><div style="font-size:0.82rem;color:#334155;line-height:1.6">Monthly Revenue = Total Revenue ÷ Tenure Months<br>Projected 12M Revenue = Monthly Rev × 12<br>Est. Gross Margin = 35% of revenue<br><span style="font-size:0.72rem;color:#94a3b8">Source: FMCG industry avg margin</span></div></div>',unsafe_allow_html=True)
+            with fm2:
+                st.markdown('<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:1rem"><div style="font-size:0.78rem;font-weight:600;color:#92400e;margin-bottom:0.5rem">COST-TO-SERVE</div><div style="font-size:0.82rem;color:#334155;line-height:1.6">+ Deductions (from data)<br>+ Dispute cost: dispute_rate × 5%<br>+ Return cost: return_rate × 15%<br><span style="font-size:0.72rem;color:#94a3b8">Source: Normality SPAN; APQC</span></div></div>',unsafe_allow_html=True)
+            with fm3:
+                st.markdown('<div style="background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:1rem"><div style="font-size:0.78rem;font-weight:600;color:#166534;margin-bottom:0.5rem">LTV FORMULA</div><div style="font-size:0.82rem;color:#334155;line-height:1.6">LTV₁₂ = (Monthly Rev × 12 × 35%) − (Annual Cost-to-Serve)<br>Health = Rev 30% + Freq 20% + DSO 30% + Disputes 20%<br><span style="font-size:0.72rem;color:#94a3b8">Churn: Health &lt; 40 = High risk</span></div></div>',unsafe_allow_html=True)
+            st.markdown("</div>",unsafe_allow_html=True)
+            st.markdown("<br>",unsafe_allow_html=True)
+            lt_l,lt_r=st.columns([3,2])
+            with lt_l:
+                st.markdown('<div class="section-card"><div class="section-title">Customer LTV Rankings</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.75rem">Ranked by projected 12-month LTV. Segment: Strategic (top-quartile LTV + healthy), Growth (healthy but lower LTV), At Risk (high LTV but declining health), Monitor (low LTV + low health).</div>',unsafe_allow_html=True)
+                for _,row in ltv_df.head(10).iterrows():
+                    seg_co={"Strategic":"#166534","Growth":"#0369a1","At Risk":"#92400e","Monitor":"#64748b"}
+                    seg_bg={"Strategic":"#dcfce7","Growth":"#e0f2fe","At Risk":"#fef3c7","Monitor":"#f1f5f9"}
+                    churn_cls="risk-high" if row["churn_risk"]=="High" else "risk-med" if row["churn_risk"]=="Medium" else "risk-low"
+                    hc=scolor(row["health_score"])
+                    st.markdown(f'<div style="padding:0.6rem 0;border-bottom:1px solid #f1f5f9"><div style="display:flex;justify-content:space-between;align-items:center"><div><span style="font-weight:500;font-size:0.85rem">{row["Customer"]}</span> <span style="font-size:0.65rem;padding:2px 8px;border-radius:10px;background:{seg_bg.get(row["segment"],"#f1f5f9")};color:{seg_co.get(row["segment"],"#64748b")};font-weight:600">{row["segment"]}</span></div><div style="display:flex;align-items:center;gap:10px"><span style="font-family:IBM Plex Mono,monospace;font-size:0.85rem;font-weight:600">{fmtc(row["ltv_12m"],ccy)}</span><span style="font-family:IBM Plex Mono,monospace;font-size:0.78rem;color:{hc}">{int(row["health_score"])}</span><span class="risk-badge {churn_cls}">{row["churn_risk"]}</span></div></div><div style="display:flex;gap:16px;font-size:0.72rem;color:#94a3b8;margin-top:3px"><span>Orders: {int(row["order_count"])}</span><span>DSO: {row["avg_dso"]:.0f}d</span><span>Net margin: {row["net_margin_pct"]}%</span><span>Rev: {fmtc(row["total_revenue"],ccy)}</span></div></div>',unsafe_allow_html=True)
+                st.markdown("</div>",unsafe_allow_html=True)
+            with lt_r:
+                st.markdown('<div class="section-card"><div class="section-title">Customer Segmentation</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.75rem">Four-quadrant segmentation based on LTV and health score.</div>',unsafe_allow_html=True)
+                seg_counts = ltv_df["segment"].value_counts()
+                for seg in ["Strategic","Growth","At Risk","Monitor"]:
+                    cnt = seg_counts.get(seg,0); pct = round(cnt/max(len(ltv_df),1)*100)
+                    seg_co2={"Strategic":"#16a34a","Growth":"#0369a1","At Risk":"#f59e0b","Monitor":"#94a3b8"}
+                    seg_desc={"Strategic":"High LTV + strong health — protect and grow","Growth":"Healthy engagement, room for revenue growth","At Risk":"High revenue but deteriorating health signals","Monitor":"Low LTV + low engagement — review cost-to-serve"}
+                    st.markdown(f'<div style="margin-bottom:0.75rem"><div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:3px"><span style="font-weight:500">{seg}</span><span style="font-family:IBM Plex Mono,monospace;font-weight:600">{cnt} ({pct}%)</span></div><div class="progress-bar-bg"><div class="progress-bar-fill" style="width:{pct}%;background:{seg_co2.get(seg,"#94a3b8")}"></div></div><div style="font-size:0.7rem;color:#94a3b8;margin-top:2px">{seg_desc.get(seg,"")}</div></div>',unsafe_allow_html=True)
+                st.markdown("</div>",unsafe_allow_html=True)
+                st.markdown('<div class="section-card"><div class="section-title">Churn Risk Alerts</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.75rem">Customers flagged for proactive outreach. Triggers: declining order frequency, extended DSO, rising disputes.</div>',unsafe_allow_html=True)
+                at_risk = ltv_df[ltv_df["churn_risk"].isin(["High","Medium"])].head(5)
+                for _,row in at_risk.iterrows():
+                    churn_cls="risk-high" if row["churn_risk"]=="High" else "risk-med"
+                    st.markdown(f'<div style="padding:0.5rem 0;border-bottom:1px solid #f1f5f9"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:500;font-size:0.82rem">{row["Customer"]}</span><span class="risk-badge {churn_cls}">{row["churn_risk"]}</span></div><div style="font-size:0.72rem;color:#94a3b8;margin-top:2px">Health: {int(row["health_score"])} · DSO: {row["avg_dso"]:.0f}d · Disputes: {row["dispute_rate"]:.0f}%</div></div>',unsafe_allow_html=True)
+                st.markdown("</div>",unsafe_allow_html=True)
+            if ca and ca.get("total",0) > 0:
+                st.markdown("<br>",unsafe_allow_html=True)
+                st.markdown('<div class="section-card"><div class="section-title">CollectIQ — Auto Cash Application</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.75rem">AI matches inbound payments to open invoices using three signals: amount matching (within 3% tolerance), identity matching (customer name/reference), and pattern matching (historical payment behaviour). Source: CollectIQ (Normality); Shib interview.</div>',unsafe_allow_html=True)
+                ca1,ca2,ca3,ca4=st.columns(4)
+                with ca1: st.markdown(mcard("Match Rate",f'{ca["match_rate"]}%',"Auto-matched","good" if ca["match_rate"]>=70 else "bad","% payments matched automatically (confidence ≥80).","CollectIQ NLP reads unstructured remittance advice","metric-card metric-card-green" if ca["match_rate"]>=70 else "metric-card metric-card-amber"),unsafe_allow_html=True)
+                with ca2: st.markdown(mcard("Auto-Matched",f'{ca["auto_matched"]}',"of " + str(ca["total"]),"good","Payments matched without human intervention.","Amount + Identity + Pattern all confirmed","metric-card metric-card-blue"),unsafe_allow_html=True)
+                with ca3: st.markdown(mcard("Review Required",f'{ca["manual_review"]}',"Partial match","neutral","Payments needing human review (confidence 45-79).","Ambiguous: some signals match, some don't","metric-card metric-card-amber"),unsafe_allow_html=True)
+                with ca4: st.markdown(mcard("Unmatched",f'{ca["unmatched"]}',"Suspense","bad" if ca["unmatched"]>0 else "good","Payments with no matching signals.","Routes to manual allocation queue","metric-card metric-card-red" if ca["unmatched"]>0 else "metric-card metric-card-green"),unsafe_allow_html=True)
+                st.markdown("<br>",unsafe_allow_html=True)
+                for item in ca["items"][:10]:
+                    conf_co = "#16a34a" if item["Confidence"] >= 80 else "#f59e0b" if item["Confidence"] >= 45 else "#dc2626"
+                    st_cls = "risk-low" if item["Match_Status"] == "Auto-Matched" else "risk-med" if item["Match_Status"] == "Review Required" else "risk-high"
+                    st.markdown(f'<div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid #f1f5f9"><div><span style="font-weight:500;font-size:0.82rem">{item["Order_ID"]}</span> <span style="font-size:0.72rem;color:#94a3b8">· {item["Customer"]}</span><div style="font-size:0.72rem;color:#64748b;margin-top:2px">Invoice: {fmtc(item["Invoice_Amount_USD"],ccy)} → Remit: {fmtc(item["Remittance_Amount"],ccy)} · {item["Match_Method"]}</div></div><div style="display:flex;align-items:center;gap:8px"><span style="font-family:IBM Plex Mono,monospace;font-size:0.82rem;color:{conf_co};font-weight:600">{item["Confidence"]}%</span><span class="risk-badge {st_cls}">{item["Match_Status"]}</span></div></div>',unsafe_allow_html=True)
+                st.markdown("</div>",unsafe_allow_html=True)
