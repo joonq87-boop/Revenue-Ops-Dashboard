@@ -489,83 +489,85 @@ MODULE_QUESTIONS = {
 
 MODULE_ICONS = {"Demand Forecasting":"📦","Order Management":"📋","Order Fulfilment & Logistics":"🚚","Billing & Revenue Mgmt":"💰","Post-Sales & Financial Closure":"🏦"}
 
-def render_health_banner(highlight_modules=None):
-    """Render the O2C Health Check banner. highlight_modules = list of module names to expand."""
+def render_health_banner(show_modules):
+    """Compact health check strip. show_modules = list of module names relevant to this tab. Only shows bottlenecks (Level 1-2 answers)."""
     if not st.session_state.done or not st.session_state.mod_scores:
         return
     ms = st.session_state.mod_scores
     diag = st.session_state.diag_responses
     ds = get_diag_scores(diag)
-
-    # Find biggest opportunity (largest gap between data potential and maturity)
     data_scores = {"Demand Forecasting":min(100,round(st.session_state.dm["accuracy"]*0.7+max(0,20-abs(st.session_state.dm["bias"]))*1.5)),"Order Management":max(0,min(100,round(100-st.session_state.om["err"]*5-st.session_state.om["disp"]*3-st.session_state.om["amend"]*0.5))),"Order Fulfilment & Logistics":max(0,min(100,round(st.session_state.fl["otif"]*0.8+max(0,10-st.session_state.fl["return_rate"])*2))),"Billing & Revenue Mgmt":max(0,min(100,round(100-st.session_state.bl["err"]*8-st.session_state.bl["disp"]*4))),"Post-Sales & Financial Closure":st.session_state.ps["score"]}
-    gaps = {m: data_scores[m] - ds.get(m, 50) for m in data_scores}
-    biggest_opp = max(gaps, key=gaps.get) if any(v > 0 for v in gaps.values()) else None
-    lowest_mod = min(ms, key=ms.get)
 
-    # Banner header
-    if biggest_opp and gaps[biggest_opp] > 10:
-        opp_text = f"<strong>Biggest unlock: {biggest_opp}</strong> — your data shows potential (score: {data_scores[biggest_opp]}) but current processes are holding you back (maturity: {ds[biggest_opp]}). Closing this gap is your highest-ROI move."
+    # Collect only bottleneck items (Level 1-2) for relevant modules
+    bottlenecks = []
+    for mod_name in show_modules:
+        if mod_name not in ms:
+            continue
+        q_keys = MODULE_QUESTIONS.get(mod_name, [])
+        for qk in q_keys:
+            ans_idx = diag.get(qk, 0)
+            if ans_idx >= 2:  # Level 3-4 = not a bottleneck, skip
+                continue
+            q_text, ans_text = "", ""
+            for mod_d, qs in DIAGNOSTIC.items():
+                for q in qs:
+                    if q["key"] == qk:
+                        q_text, ans_text = q["q"], q["opts"][ans_idx]
+                        break
+            insight = MATURITY_INSIGHTS.get(qk, ["","","",""])[ans_idx]
+            bottlenecks.append({"mod": mod_name, "q": q_text, "ans": ans_text, "insight": insight, "level": ans_idx + 1})
+
+    if not bottlenecks:
+        # No bottlenecks — show a compact green strip
+        pills = " ".join([f'<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:8px;background:#f0fdf4;border:1px solid #bbf7d0;font-size:0.72rem;font-weight:600;color:#166534;margin-right:4px">{MODULE_ICONS.get(m,"")} {ms[m]}</span>' for m in show_modules if m in ms])
+        st.markdown(f'<div style="display:flex;align-items:center;gap:10px;padding:8px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;margin-bottom:1rem"><span style="font-size:0.75rem;color:#166534;font-weight:500">✓ No process bottlenecks on this view</span><div style="margin-left:auto">{pills}</div></div>',unsafe_allow_html=True)
+        return
+
+    # Find the single biggest drag
+    relevant_gaps = {m: data_scores.get(m,50) - ds.get(m,50) for m in show_modules if m in ms}
+    biggest = max(relevant_gaps, key=relevant_gaps.get) if relevant_gaps else show_modules[0]
+    drag_pts = relevant_gaps.get(biggest, 0)
+
+    # Module score pills (compact, inline)
+    pills_html = ""
+    arrow_html = '<span style="font-size:0.6rem;color:#dc2626">▼</span>'
+    for m in show_modules:
+        if m not in ms: continue
+        sc = scolor(ms[m])
+        has_issues = any(b["mod"] == m for b in bottlenecks)
+        bg = "#fef2f2" if ms[m] < 45 else "#fffbeb" if ms[m] < 70 else "#f0fdf4"
+        border = "#fecaca" if ms[m] < 45 else "#fde68a" if ms[m] < 70 else "#bbf7d0"
+        trailing = arrow_html if has_issues else ""
+        pills_html += f'<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:8px;background:{bg};border:1px solid {border};font-size:0.72rem;margin-right:4px"><span style="opacity:0.7">{MODULE_ICONS.get(m,"")}</span><span style="font-family:JetBrains Mono;font-weight:700;color:{sc}">{ms[m]}</span>{trailing}</span>'
+
+    # Headline
+    if drag_pts > 10:
+        headline = f'<strong>{biggest}</strong> — your processes are costing you {drag_pts} points. {len(bottlenecks)} bottleneck{"s" if len(bottlenecks)!=1 else ""} found below.'
     else:
-        opp_text = f"<strong>Priority area: {lowest_mod}</strong> — scoring {ms[lowest_mod]}/100. Focus improvement efforts here for the greatest impact on your O2C cycle."
+        headline = f'{len(bottlenecks)} process bottleneck{"s" if len(bottlenecks)!=1 else ""} detected — these are keeping your scores down.'
 
-    with st.expander("🏥 Your O2C Health Check — how your current processes impact your scores", expanded=(highlight_modules is not None)):
-        st.markdown(f'<div style="background:linear-gradient(135deg,#eff6ff,#f0f9ff);border:1px solid #bfdbfe;border-radius:12px;padding:0.85rem 1.1rem;font-size:0.84rem;color:#1e40af;margin-bottom:1rem">{opp_text}</div>',unsafe_allow_html=True)
+    # Render the strip
+    st.markdown(f'''<div style="background:linear-gradient(135deg,#fefce8,#fff7ed);border:1px solid #fed7aa;border-radius:10px;padding:8px 14px;margin-bottom:0.75rem">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <div style="font-size:0.78rem;color:#92400e">⚠ {headline}</div>
+            <div style="display:flex;align-items:center;flex-shrink:0">{pills_html}</div>
+        </div>
+    </div>''',unsafe_allow_html=True)
 
-        for mod_name in ms:
-            is_highlight = highlight_modules and mod_name in highlight_modules
-            data_sc = data_scores.get(mod_name, 50)
-            mat_sc = ds.get(mod_name, 50)
-            blended = ms[mod_name]
-            icon = MODULE_ICONS.get(mod_name, "")
-            sc = scolor(blended)
-            # Gauge bar
-            drag = data_sc - blended
-            drag_text = f"Process maturity is dragging your score down by {drag} points" if drag > 5 else f"Your processes match your data quality" if drag <= 2 else f"Minor process gap — {drag} points below data potential"
-            drag_color = "#dc2626" if drag > 15 else "#f59e0b" if drag > 5 else "#16a34a"
-
-            st.markdown(f'''<div style="background:white;border:1px solid rgba(226,232,240,0.7);border-radius:12px;padding:1rem 1.2rem;margin-bottom:{"0.75rem" if is_highlight else "0.5rem"};{"border-left:3px solid "+sc if is_highlight else ""}">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
-                    <div style="font-size:0.82rem;font-weight:600;color:#0f172a">{icon} {mod_name}</div>
-                    <div style="display:flex;align-items:center;gap:12px">
-                        <span style="font-size:0.7rem;color:#64748b">Data: <span style="font-family:JetBrains Mono;font-weight:600;color:#0369a1">{data_sc}</span></span>
-                        <span style="font-size:0.7rem;color:#64748b">Maturity: <span style="font-family:JetBrains Mono;font-weight:600;color:{drag_color}">{mat_sc}</span></span>
-                        <span style="font-family:JetBrains Mono;font-size:1.1rem;font-weight:700;color:{sc}">{blended}</span>
-                    </div>
-                </div>
-                <div style="position:relative;height:8px;background:#f1f5f9;border-radius:6px;overflow:hidden;margin-bottom:0.4rem">
-                    <div style="position:absolute;left:0;top:0;height:100%;width:{blended}%;background:{sc};border-radius:6px;transition:width 0.3s"></div>
-                    <div style="position:absolute;left:0;top:0;height:100%;width:{data_sc}%;border-right:2px dashed #0369a1;opacity:0.5"></div>
-                </div>
-                <div style="font-size:0.72rem;color:{drag_color};font-weight:500">{drag_text}</div>
-            </div>''',unsafe_allow_html=True)
-
-            # Expanded question detail for highlighted modules
-            if is_highlight:
-                q_keys = MODULE_QUESTIONS.get(mod_name, [])
-                for qk in q_keys:
-                    ans_idx = diag.get(qk, 0)
-                    # Find the question text from DIAGNOSTIC
-                    q_text = ""
-                    ans_text = ""
-                    for mod_d, qs in DIAGNOSTIC.items():
-                        for q in qs:
-                            if q["key"] == qk:
-                                q_text = q["q"]
-                                ans_text = q["opts"][ans_idx]
-                                break
-                    insight = MATURITY_INSIGHTS.get(qk, ["","","",""])[ans_idx]
-                    level = ans_idx + 1
-                    level_label = ["Basic", "Developing", "Established", "Advanced"][ans_idx]
-                    level_color = ["#dc2626", "#f59e0b", "#0369a1", "#16a34a"][ans_idx]
-                    st.markdown(f'''<div style="margin-left:1.5rem;padding:0.5rem 0.75rem;border-left:2px solid #e2e8f0;margin-bottom:0.4rem">
-                        <div style="font-size:0.75rem;color:#64748b;margin-bottom:2px">{q_text}</div>
-                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-                            <span style="font-size:0.78rem;font-weight:600;color:#0f172a">{ans_text}</span>
-                            <span style="font-size:0.62rem;font-weight:600;padding:2px 8px;border-radius:10px;background:{"#fef2f2" if level<=1 else "#fffbeb" if level<=2 else "#eff6ff" if level<=3 else "#f0fdf4"};color:{level_color}">Level {level}: {level_label}</span>
-                        </div>
-                        <div style="font-size:0.75rem;color:#475569;line-height:1.5">{insight}</div>
-                    </div>''',unsafe_allow_html=True)
+    # Bottleneck rows — compact, one line each
+    for b in bottlenecks:
+        lv_color = "#dc2626" if b["level"] == 1 else "#f59e0b"
+        lv_bg = "#fef2f2" if b["level"] == 1 else "#fffbeb"
+        lv_label = "Basic" if b["level"] == 1 else "Developing"
+        st.markdown(f'''<div style="display:flex;align-items:flex-start;gap:10px;padding:6px 14px 6px 20px;border-left:3px solid {lv_color};margin-bottom:4px;margin-left:4px">
+            <div style="flex-shrink:0;margin-top:1px"><span style="font-size:0.6rem;font-weight:700;padding:2px 6px;border-radius:6px;background:{lv_bg};color:{lv_color}">L{b["level"]}</span></div>
+            <div style="min-width:0">
+                <span style="font-size:0.75rem;font-weight:600;color:#0f172a">{b["ans"]}</span>
+                <span style="font-size:0.7rem;color:#94a3b8;margin-left:6px">· {MODULE_ICONS.get(b["mod"],"")} {b["mod"]}</span>
+                <div style="font-size:0.72rem;color:#64748b;line-height:1.4;margin-top:1px">{b["insight"]}</div>
+            </div>
+        </div>''',unsafe_allow_html=True)
+    st.markdown('<div style="height:8px"></div>',unsafe_allow_html=True)
 
 DEFS={"fc_df":None,"o2c_df":None,"fc_hash":None,"o2c_hash":None,"dm":None,"om":None,"fl":None,"bl":None,"ps":None,"mod_scores":None,"ai_exec":None,"ai_agents":None,"done":False,"news":None,"wb":None,"gt":None,"market_ai":None,"market_fetched":False,"region":"Singapore","industry":"F&B / FMCG","diag_responses":{},"inv_days":45,"dpo_days":30,"display_ccy":"USD","ltv":None,"cash_app":None,"disputes":None,"order_ingest":None,"invoice_demo":None}
 for k,v in DEFS.items():
@@ -673,7 +675,7 @@ with tabs[0]:
 with tabs[2]:
     if not st.session_state.done: st.info("Complete Setup and click Run Full Analysis.")
     else:
-        render_health_banner(highlight_modules=["Demand Forecasting","Order Management","Order Fulfilment & Logistics","Billing & Revenue Mgmt","Post-Sales & Financial Closure"])
+        render_health_banner(show_modules=["Demand Forecasting","Order Management","Order Fulfilment & Logistics","Billing & Revenue Mgmt","Post-Sales & Financial Closure"])
         ai=st.session_state.ai_exec or {}; bl=st.session_state.bl; ps=st.session_state.ps; s=ai.get("health_score",0)
         if st.session_state.market_fetched and st.session_state.market_ai:
             ms_t=st.session_state.market_ai.get("market_summary","")
@@ -763,7 +765,7 @@ with tabs[2]:
 with tabs[1]:
     if not st.session_state.done: st.info("Upload data and Run Full Analysis.")
     else:
-        render_health_banner(highlight_modules=["Demand Forecasting"])
+        render_health_banner(show_modules=["Demand Forecasting"])
         dm=st.session_state.dm; ob=INDUSTRIES[industry]["otif_benchmark"]
         c1,c2,c3,c4=st.columns(4)
         with c1: st.markdown(mcard("Forecast Accuracy",f'{dm["accuracy"]}%',"Target: 85-90%","good" if dm["accuracy"]>=85 else "bad","Formula: 100 - MAPE. Higher = closer to actual demand.","Target: Normality SoW (65%→90%+); Expert Interview confirmed no tracking","metric-card metric-card-blue"),unsafe_allow_html=True)
@@ -858,7 +860,7 @@ with tabs[1]:
 with tabs[3]:
     if not st.session_state.done: st.info("Upload data and Run Full Analysis.")
     else:
-        render_health_banner(highlight_modules=["Billing & Revenue Mgmt","Post-Sales & Financial Closure"])
+        render_health_banner(show_modules=["Billing & Revenue Mgmt","Post-Sales & Financial Closure"])
         bl=st.session_state.bl; lpct=round((bl["leak_total"]/max(bl["rev"],1))*100,1)
         c1,c2,c3,c4=st.columns(4)
         with c1: st.markdown(mcard("DSO",f'{bl["dso"]}d',f'{bl["gap"]:+.0f}d vs {bl["bench"]}d',"good" if bl["gap"]<=0 else "bad","Avg DSO_Days. Days from invoice to payment.",f"Bench: {bl['bench']}d for {industry}. Source: APQC; McKinsey O2C Optimization","metric-card metric-card-blue"),unsafe_allow_html=True)
@@ -972,7 +974,7 @@ with tabs[3]:
 with tabs[4]:
     if not st.session_state.done: st.info("Upload data and Run Full Analysis.")
     else:
-        render_health_banner(highlight_modules=["Post-Sales & Financial Closure"])
+        render_health_banner(show_modules=["Post-Sales & Financial Closure"])
         ltv_df = st.session_state.ltv
         ca = st.session_state.cash_app
         if ltv_df is not None and len(ltv_df) > 0:
