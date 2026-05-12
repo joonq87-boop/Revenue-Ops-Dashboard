@@ -590,7 +590,7 @@ with h5:
     st.markdown("<br>",unsafe_allow_html=True)
     if st.button("Reset"): reset(); st.rerun()
 
-tabs=st.tabs(["⚙ Setup","📊 ForecastIQ Dashboard","📋 O2C Performance Hub","💰 CFO Dashboard","🏦 Cash App & LTV Engine"])
+tabs=st.tabs(["⚙ Setup","🏥 Executive Health Report","📊 ForecastIQ Dashboard","📋 O2C Performance Hub","💰 CFO Dashboard","🏦 Cash App & LTV Engine"])
 
 with tabs[0]:
     st.markdown('<div style="font-size:1.3rem;font-weight:700;color:#0c1222;letter-spacing:-0.02em">Setup & Configuration</div><div style="font-size:0.88rem;color:#64748b;margin-bottom:1.5rem">Upload data, complete maturity assessment, then run analysis.</div>',unsafe_allow_html=True)
@@ -672,7 +672,215 @@ with tabs[0]:
                 st.session_state.market_fetched=True; st.rerun()
         if st.session_state.done: st.success("Analysis complete — explore tabs above.")
 
-with tabs[2]:
+# ==================== TAB 1: EXECUTIVE HEALTH REPORT ====================
+with tabs[1]:
+    if not st.session_state.done: st.info("Complete Setup and click Run Full Analysis to generate your health report.")
+    else:
+        ms = st.session_state.mod_scores; diag = st.session_state.diag_responses; ds = get_diag_scores(diag)
+        data_scores = {"Demand Forecasting":min(100,round(st.session_state.dm["accuracy"]*0.7+max(0,20-abs(st.session_state.dm["bias"]))*1.5)),"Order Management":max(0,min(100,round(100-st.session_state.om["err"]*5-st.session_state.om["disp"]*3-st.session_state.om["amend"]*0.5))),"Order Fulfilment & Logistics":max(0,min(100,round(st.session_state.fl["otif"]*0.8+max(0,10-st.session_state.fl["return_rate"])*2))),"Billing & Revenue Mgmt":max(0,min(100,round(100-st.session_state.bl["err"]*8-st.session_state.bl["disp"]*4))),"Post-Sales & Financial Closure":st.session_state.ps["score"]}
+        overall = round(sum(ms.values()) / max(len(ms), 1))
+        overall_label = "Good" if overall >= 70 else "At Risk" if overall >= 45 else "Critical"
+        overall_color = scolor(overall)
+
+        # Compute drag per module
+        drags = {}
+        for m in ms:
+            drags[m] = {"data": data_scores.get(m, 50), "maturity": ds.get(m, 50), "blended": ms[m], "drag": data_scores.get(m, 50) - ms[m]}
+        total_drag = sum(d["drag"] for d in drags.values() if d["drag"] > 0)
+        worst_module = max(drags, key=lambda m: drags[m]["drag"]) if drags else ""
+
+        # One-sentence diagnosis
+        if total_drag > 30:
+            diagnosis = f"Your data quality is solid across most modules, but manual processes — particularly in {worst_module} — are suppressing your overall O2C performance by an estimated {total_drag} points. Addressing the bottlenecks below would unlock significant operational and financial improvement."
+        elif total_drag > 10:
+            diagnosis = f"Your operations are functional but process gaps in {worst_module} and adjacent modules are leaving value on the table. Targeted investment in the recommendations below would close the gap."
+        else:
+            diagnosis = "Your data and processes are well-aligned. Focus on the refinement recommendations below to move from good to best-in-class."
+
+        # === OVERALL HEALTH SCORE ===
+        st.markdown(f'''<div style="background:linear-gradient(135deg,#0c1222 0%,#162040 50%,#1a2a52 100%);border-radius:16px;padding:2rem 2.5rem;margin-bottom:1.25rem;box-shadow:0 4px 24px rgba(10,22,40,0.15)">
+            <div style="display:flex;align-items:center;gap:2.5rem">
+                <div style="flex-shrink:0;text-align:center">
+                    <div style="font-size:0.65rem;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:rgba(148,163,184,0.8);margin-bottom:0.4rem">OVERALL O2C HEALTH</div>
+                    <div style="position:relative;width:120px;height:120px;margin:0 auto">
+                        <svg viewBox="0 0 120 120" style="transform:rotate(-90deg)">
+                            <circle cx="60" cy="60" r="52" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="10"/>
+                            <circle cx="60" cy="60" r="52" fill="none" stroke="{overall_color}" stroke-width="10" stroke-dasharray="{overall * 3.27} 327" stroke-linecap="round"/>
+                        </svg>
+                        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center">
+                            <div style="font-family:JetBrains Mono;font-size:2rem;font-weight:700;color:white;line-height:1">{overall}</div>
+                            <div style="font-size:0.7rem;font-weight:600;color:{overall_color}">{overall_label}</div>
+                        </div>
+                    </div>
+                </div>
+                <div style="flex:1">
+                    <div style="font-size:1.1rem;font-weight:600;color:white;margin-bottom:0.5rem">Executive Health Report</div>
+                    <div style="font-size:0.88rem;color:rgba(203,213,225,0.9);line-height:1.65">{diagnosis}</div>
+                    <div style="display:flex;gap:16px;margin-top:1rem">
+                        <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:8px 14px;text-align:center">
+                            <div style="font-size:0.6rem;color:rgba(148,163,184,0.7);text-transform:uppercase;letter-spacing:0.1em">Process Drag</div>
+                            <div style="font-family:JetBrains Mono;font-size:1.1rem;font-weight:700;color:{"#f87171" if total_drag>20 else "#fbbf24" if total_drag>5 else "#4ade80"}">{total_drag} pts</div>
+                        </div>
+                        <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:8px 14px;text-align:center">
+                            <div style="font-size:0.6rem;color:rgba(148,163,184,0.7);text-transform:uppercase;letter-spacing:0.1em">Biggest Gap</div>
+                            <div style="font-size:0.82rem;font-weight:600;color:white;margin-top:2px">{worst_module.split(" ")[0] if worst_module else "—"}</div>
+                        </div>
+                        <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:8px 14px;text-align:center">
+                            <div style="font-size:0.6rem;color:rgba(148,163,184,0.7);text-transform:uppercase;letter-spacing:0.1em">Revenue at Risk</div>
+                            <div style="font-family:JetBrains Mono;font-size:1.1rem;font-weight:700;color:#fbbf24">{fmtc(st.session_state.bl["leak_total"],ccy,True)}</div>
+                        </div>
+                        <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:8px 14px;text-align:center">
+                            <div style="font-size:0.6rem;color:rgba(148,163,184,0.7);text-transform:uppercase;letter-spacing:0.1em">DSO Gap</div>
+                            <div style="font-family:JetBrains Mono;font-size:1.1rem;font-weight:700;color:{"#f87171" if st.session_state.bl["gap"]>5 else "#4ade80"}">{st.session_state.bl["gap"]:+.0f}d</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>''',unsafe_allow_html=True)
+
+        # === MODULE HEALTH BARS ===
+        st.markdown('<div class="section-card"><div class="section-title">Module Health — Data vs Process Maturity</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:1rem">Each bar shows your score split into two parts: <span style="color:#0369a1;font-weight:600">blue = data quality</span> and <span style="font-weight:600">colored segment = what your processes allow you to achieve</span>. The gap between them is the drag from current process inefficiencies reported in your setup assessment.</div>',unsafe_allow_html=True)
+        for mod_name in ms:
+            d = drags[mod_name]
+            sc = scolor(d["blended"])
+            icon = MODULE_ICONS.get(mod_name, "")
+            drag_val = d["drag"]
+            if drag_val > 15: drag_label, drag_co = f"−{drag_val} pts drag", "#dc2626"
+            elif drag_val > 5: drag_label, drag_co = f"−{drag_val} pts drag", "#f59e0b"
+            elif drag_val > 0: drag_label, drag_co = f"−{drag_val} pts", "#94a3b8"
+            else: drag_label, drag_co = "No drag", "#16a34a"
+            st.markdown(f'''<div style="display:flex;align-items:center;gap:14px;padding:8px 0;border-bottom:1px solid #f8fafc">
+                <div style="width:200px;flex-shrink:0;font-size:0.8rem;font-weight:600;color:#0f172a">{icon} {mod_name}</div>
+                <div style="flex:1;position:relative;height:22px;background:#f1f5f9;border-radius:6px;overflow:hidden">
+                    <div style="position:absolute;left:0;top:0;height:100%;width:{d["data"]}%;background:rgba(3,105,161,0.15);border-radius:6px"></div>
+                    <div style="position:absolute;left:0;top:0;height:100%;width:{d["blended"]}%;background:{sc};border-radius:6px;opacity:0.85"></div>
+                    <div style="position:absolute;left:{d["blended"]}%;top:0;height:100%;width:{max(0,d["data"]-d["blended"])}%;background:repeating-linear-gradient(45deg,transparent,transparent 3px,rgba(220,38,38,0.12) 3px,rgba(220,38,38,0.12) 6px);border-radius:0 6px 6px 0"></div>
+                    <div style="position:absolute;top:50%;left:8px;transform:translateY(-50%);font-family:JetBrains Mono;font-size:0.72rem;font-weight:700;color:white;text-shadow:0 1px 2px rgba(0,0,0,0.3)">{d["blended"]}</div>
+                </div>
+                <div style="width:100px;flex-shrink:0;text-align:right;font-family:JetBrains Mono;font-size:0.75rem;font-weight:600;color:{drag_co}">{drag_label}</div>
+            </div>''',unsafe_allow_html=True)
+        st.markdown('<div style="display:flex;gap:16px;margin-top:0.75rem;font-size:0.68rem;color:#94a3b8"><span>█ Blended score (what you achieve today)</span><span style="color:#0369a1">░ Data potential (if processes were optimised)</span><span style="color:#dc2626">▒ Process drag (your setup answers)</span></div>',unsafe_allow_html=True)
+        st.markdown("</div>",unsafe_allow_html=True)
+
+        # === RECOMMENDATIONS ===
+        # Build recommendations from bottleneck questions and data gaps
+        all_recs = []
+        # Recommendation templates: (question_key, answer_index, recommendation, module, timeline, impact_func)
+        REC_MAP = {
+            ("df_method", 0): {"action": "Replace spreadsheet forecasting with ML-assisted demand planning", "module": "Demand Forecasting", "timeline": "8-12 weeks", "impact": "Forecast accuracy improvement of 15-25%, reducing excess inventory and stockouts", "tier": 1},
+            ("df_method", 1): {"action": "Upgrade from basic ERP forecasting to AI ensemble models with external signals", "module": "Demand Forecasting", "timeline": "10-14 weeks", "impact": "10-15% accuracy improvement by incorporating promotions, seasonality, and market data", "tier": 1},
+            ("df_tracking", 0): {"action": "Implement forecast accuracy tracking (MAPE, bias) with monthly review cadence", "module": "Demand Forecasting", "timeline": "2-4 weeks", "impact": "Visibility into forecast performance — you can't improve what you can't measure", "tier": 1},
+            ("df_tracking", 1): {"action": "Move from occasional to structured monthly forecast accuracy reviews", "module": "Demand Forecasting", "timeline": "2-3 weeks", "impact": "Catch systematic bias before it compounds into inventory and service failures", "tier": 2},
+            ("df_customer_data", 0): {"action": "Deploy DistributorConnect portal to capture customer demand signals", "module": "Demand Forecasting", "timeline": "12-16 weeks", "impact": "Reduce bullwhip effect by replacing guesswork with actual customer data", "tier": 2},
+            ("df_customer_data", 1): {"action": "Expand customer forecast data coverage beyond 50% using lightweight portals", "module": "Demand Forecasting", "timeline": "8-12 weeks", "impact": "Close demand signal blind spots for mid-tier customers", "tier": 2},
+            ("om_channel", 0): {"action": "Deploy OrderIngest Hub for unified multi-channel order capture with LLM/OCR", "module": "Order Management", "timeline": "6-10 weeks", "impact": "Eliminate manual re-keying errors — the #1 source of downstream disputes", "tier": 1},
+            ("om_channel", 1): {"action": "Add AI-powered order parsing for non-EDI channels (email, WhatsApp, fax)", "module": "Order Management", "timeline": "6-8 weeks", "impact": "Reduce order entry errors from format inconsistency across channels", "tier": 1},
+            ("om_validation", 0): {"action": "Automate order validation with ATP, credit check, and price verification", "module": "Order Management", "timeline": "6-8 weeks", "impact": "Stop errors at entry — prevents cascade into fulfilment, billing, and disputes", "tier": 1},
+            ("om_validation", 1): {"action": "Extend partial validation to cover full ATP + BOM + credit + PriceGuard checks", "module": "Order Management", "timeline": "4-6 weeks", "impact": "Close the exceptions gap that causes outsized downstream damage", "tier": 2},
+            ("om_amendments", 0): {"action": "Implement order confirmation workflows with amendment cut-off rules", "module": "Order Management", "timeline": "4-6 weeks", "impact": "Reduce 30%+ amendment rate — each amendment costs processing time and error risk", "tier": 1},
+            ("om_amendments", 1): {"action": "Tighten amendment windows with ChangeControl Hub audit trail", "module": "Order Management", "timeline": "3-5 weeks", "impact": "Reduce amendments from 15-30% toward <10% with cut-off enforcement", "tier": 2},
+            ("fl_otif", 0): {"action": "Implement OTIF tracking with ShipmentTracker and ePOD confirmation", "module": "Fulfilment & Logistics", "timeline": "4-6 weeks", "impact": "Establish baseline fulfilment visibility — currently flying blind on delivery performance", "tier": 1},
+            ("fl_otif", 1): {"action": "Formalise OTIF measurement by customer, SKU, and route for root cause analysis", "module": "Fulfilment & Logistics", "timeline": "3-5 weeks", "impact": "Move from estimates to actionable data — identify which routes and customers fail most", "tier": 2},
+            ("fl_wms", 0): {"action": "Deploy WMS Optimiser to replace paper-based warehouse management", "module": "Fulfilment & Logistics", "timeline": "10-14 weeks", "impact": "Reduce mispicks, improve dispatch speed, enable FEFO compliance", "tier": 2},
+            ("fl_wms", 1): {"action": "Upgrade to advanced WMS with wave planning and route-optimised picking", "module": "Fulfilment & Logistics", "timeline": "8-12 weeks", "impact": "15-20% throughput improvement with optimised pick paths", "tier": 2},
+            ("fl_visibility", 0): {"action": "Integrate carrier tracking into LogisticsConnect for real-time shipment visibility", "module": "Fulfilment & Logistics", "timeline": "6-8 weeks", "impact": "Proactive exception management — know about delays before customers do", "tier": 1},
+            ("fl_visibility", 1): {"action": "Consolidate carrier tracking into single dashboard with exception alerts", "module": "Fulfilment & Logistics", "timeline": "4-6 weeks", "impact": "Replace reactive carrier-website checks with unified proactive view", "tier": 2},
+            ("br_invoicing", 0): {"action": "Deploy BillingEngine auto-invoice trigger on ePOD confirmation", "module": "Billing & Revenue", "timeline": "4-6 weeks", "impact": "Eliminate 24-48 hour billing delay — directly reduces DSO", "tier": 1},
+            ("br_invoicing", 1): {"action": "Add auto-trigger on shipment confirmation to remove manual finance step", "module": "Billing & Revenue", "timeline": "3-5 weeks", "impact": "Cut invoice generation time from hours to minutes", "tier": 1},
+            ("br_discount", 0): {"action": "Implement PriceGuard Engine for pricing discipline from quote to invoice", "module": "Billing & Revenue", "timeline": "6-8 weeks", "impact": "Close systematic revenue leakage from ad-hoc discounting — typically 1-3% of revenue", "tier": 1},
+            ("br_discount", 1): {"action": "Upgrade to rules-based discount governance with real-time enforcement", "module": "Billing & Revenue", "timeline": "4-6 weeks", "impact": "Prevent retroactive approval loopholes that bypass controls", "tier": 2},
+            ("br_portal", 0): {"action": "Build automated customer portal submission capability", "module": "Billing & Revenue", "timeline": "8-10 weeks", "impact": "Reduce DSO for portal-dependent customers where manual submission causes delays", "tier": 2},
+            ("br_portal", 1): {"action": "Automate per-customer portal rules to eliminate manual upload burden", "module": "Billing & Revenue", "timeline": "6-8 weeks", "impact": "Scale portal compliance without proportional headcount", "tier": 2},
+            ("ps_collections", 0): {"action": "Deploy CollectIQ risk-based collections prioritisation", "module": "Post-Sales & Closure", "timeline": "4-6 weeks", "impact": "Chase highest-risk invoices first — not just whoever shouts loudest", "tier": 1},
+            ("ps_collections", 1): {"action": "Upgrade from FIFO to intelligent risk-weighted collections queue", "module": "Post-Sales & Closure", "timeline": "3-5 weeks", "impact": "Stop chasing $500 invoices at 31 days while $50K invoices approach risk", "tier": 2},
+            ("ps_aging", 0): {"action": "Implement predictive aging alerts at 30 days to prevent 90+ day migration", "module": "Post-Sales & Closure", "timeline": "4-6 weeks", "impact": "20%+ past 90 days is serious write-off risk — early intervention changes trajectory", "tier": 1},
+            ("ps_aging", 1): {"action": "Deploy predictive collections to catch at-risk invoices at 30 days", "module": "Post-Sales & Closure", "timeline": "4-6 weeks", "impact": "Reduce 90+ day bucket from 10-20% toward <5%", "tier": 2},
+            ("ps_cash_app", 0): {"action": "Deploy CollectIQ auto cash application with AI matching", "module": "Post-Sales & Closure", "timeline": "6-8 weeks", "impact": "Eliminate manual payment matching — reduce suspense account balances and apparent AR", "tier": 1},
+            ("ps_cash_app", 1): {"action": "Extend automated matching to handle short-pays and unstructured remittance", "module": "Post-Sales & Closure", "timeline": "4-6 weeks", "impact": "Close the last 20-30% of payments that require manual allocation", "tier": 2},
+        }
+
+        for qk, ans_idx in diag.items():
+            if ans_idx >= 2: continue  # Level 3-4, not a bottleneck
+            key = (qk, ans_idx)
+            if key in REC_MAP:
+                rec = REC_MAP[key].copy()
+                # Compute estimated score impact
+                rec["score_impact"] = round(drags.get(rec.get("module_key", ""), {}).get("drag", 8) * 0.4, 0)
+                # Find the answer text
+                for mod_d, qs in DIAGNOSTIC.items():
+                    for q in qs:
+                        if q["key"] == qk:
+                            rec["because"] = q["opts"][ans_idx]
+                            break
+                all_recs.append(rec)
+
+        # Also add data-driven recs
+        if st.session_state.dm["accuracy"] < 85:
+            all_recs.append({"action": f"Improve forecast accuracy from {st.session_state.dm['accuracy']}% toward 85%+ target", "module": "Demand Forecasting", "timeline": "Ongoing", "impact": f"Current {st.session_state.dm['mape']}% MAPE is above the 15% industry benchmark", "tier": 2, "because": f"Data: forecast accuracy at {st.session_state.dm['accuracy']}%"})
+        if st.session_state.bl["gap"] > 10:
+            all_recs.append({"action": f"Reduce DSO from {st.session_state.bl['dso']:.0f} days toward {st.session_state.bl['bench']} day benchmark", "module": "Billing & Revenue", "timeline": "4-8 weeks", "impact": f"{st.session_state.bl['gap']:.0f} day gap represents {fmtc(st.session_state.bl['rev']*st.session_state.bl['gap']/365,ccy,True)} in trapped working capital", "tier": 1, "because": f"Data: DSO {st.session_state.bl['gap']:.0f} days above benchmark"})
+        if st.session_state.ps["aging"]["90d"] > 10:
+            all_recs.append({"action": "Reduce AR aging past 90 days from critical levels", "module": "Post-Sales & Closure", "timeline": "Immediate", "impact": f"{st.session_state.ps['aging']['90d']}% past 90 days creates significant write-off exposure", "tier": 1, "because": f"Data: {st.session_state.ps['aging']['90d']}% receivables past 90 days"})
+
+        # Sort: tier 1 first, then tier 2
+        tier1 = [r for r in all_recs if r.get("tier") == 1][:3]
+        tier2 = [r for r in all_recs if r.get("tier") == 2 or (r.get("tier") == 1 and r not in tier1)][:3]
+        if len(tier1) < 3:
+            extras = [r for r in all_recs if r not in tier1 and r not in tier2]
+            tier1.extend(extras[:3 - len(tier1)])
+        if len(tier2) < 3:
+            extras2 = [r for r in all_recs if r not in tier1 and r not in tier2]
+            tier2.extend(extras2[:3 - len(tier2)])
+
+        # Render recommendations
+        r1col, r2col = st.columns(2)
+        with r1col:
+            st.markdown(f'''<div style="background:white;border:1px solid rgba(226,232,240,0.7);border-radius:16px;padding:1.4rem;box-shadow:0 1px 3px rgba(0,0,0,0.02)">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:1rem">
+                    <div style="background:linear-gradient(135deg,#dc2626,#ef4444);width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:0.85rem;color:white;font-weight:700">!</div>
+                    <div><div style="font-size:0.78rem;font-weight:700;color:#0f172a;letter-spacing:0.02em">FIX NOW</div><div style="font-size:0.65rem;color:#94a3b8">Highest-impact, shortest-timeline actions</div></div>
+                </div>''',unsafe_allow_html=True)
+            for i, rec in enumerate(tier1, 1):
+                st.markdown(f'''<div style="padding:0.7rem 0;{"border-bottom:1px solid #f1f5f9" if i<len(tier1) else ""}">
+                    <div style="display:flex;align-items:flex-start;gap:10px">
+                        <div style="background:#0c1222;color:white;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;flex-shrink:0;margin-top:1px">{i}</div>
+                        <div>
+                            <div style="font-size:0.88rem;font-weight:600;color:#0f172a;line-height:1.4">{rec["action"]}</div>
+                            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:0.4rem">
+                                <span style="font-size:0.65rem;font-weight:600;padding:2px 8px;border-radius:8px;background:#eff6ff;color:#1d4ed8">{rec.get("module","")}</span>
+                                <span style="font-size:0.65rem;padding:2px 8px;border-radius:8px;background:#f1f5f9;color:#64748b">⏱ {rec.get("timeline","")}</span>
+                            </div>
+                            <div style="font-size:0.78rem;color:#16a34a;margin-top:0.35rem;line-height:1.4">📈 {rec.get("impact","")}</div>
+                            <div style="font-size:0.7rem;color:#94a3b8;margin-top:0.2rem">Because you reported: <span style="font-weight:500;color:#64748b">{rec.get("because","")}</span></div>
+                        </div>
+                    </div>
+                </div>''',unsafe_allow_html=True)
+            st.markdown("</div>",unsafe_allow_html=True)
+
+        with r2col:
+            st.markdown(f'''<div style="background:white;border:1px solid rgba(226,232,240,0.7);border-radius:16px;padding:1.4rem;box-shadow:0 1px 3px rgba(0,0,0,0.02)">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:1rem">
+                    <div style="background:linear-gradient(135deg,#0369a1,#0ea5e9);width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:0.85rem;color:white;font-weight:700">→</div>
+                    <div><div style="font-size:0.78rem;font-weight:700;color:#0f172a;letter-spacing:0.02em">PLAN NEXT</div><div style="font-size:0.65rem;color:#94a3b8">Important improvements to build on Tier 1 fixes</div></div>
+                </div>''',unsafe_allow_html=True)
+            for i, rec in enumerate(tier2, 1):
+                st.markdown(f'''<div style="padding:0.7rem 0;{"border-bottom:1px solid #f1f5f9" if i<len(tier2) else ""}">
+                    <div style="display:flex;align-items:flex-start;gap:10px">
+                        <div style="background:#e2e8f0;color:#475569;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;flex-shrink:0;margin-top:1px">{i}</div>
+                        <div>
+                            <div style="font-size:0.88rem;font-weight:600;color:#0f172a;line-height:1.4">{rec["action"]}</div>
+                            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:0.4rem">
+                                <span style="font-size:0.65rem;font-weight:600;padding:2px 8px;border-radius:8px;background:#eff6ff;color:#1d4ed8">{rec.get("module","")}</span>
+                                <span style="font-size:0.65rem;padding:2px 8px;border-radius:8px;background:#f1f5f9;color:#64748b">⏱ {rec.get("timeline","")}</span>
+                            </div>
+                            <div style="font-size:0.78rem;color:#16a34a;margin-top:0.35rem;line-height:1.4">📈 {rec.get("impact","")}</div>
+                            <div style="font-size:0.7rem;color:#94a3b8;margin-top:0.2rem">Because you reported: <span style="font-weight:500;color:#64748b">{rec.get("because","")}</span></div>
+                        </div>
+                    </div>
+                </div>''',unsafe_allow_html=True)
+            st.markdown("</div>",unsafe_allow_html=True)
+
+with tabs[3]:
     if not st.session_state.done: st.info("Complete Setup and click Run Full Analysis.")
     else:
         render_health_banner(show_modules=["Demand Forecasting","Order Management","Order Fulfilment & Logistics","Billing & Revenue Mgmt","Post-Sales & Financial Closure"])
@@ -762,7 +970,7 @@ with tabs[2]:
             st.markdown(f'<div class="agent-card {sv}"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.3rem"><span style="font-size:0.75rem;font-weight:600;color:#0a1628">Day {item.get("day","?")} · {item.get("module","")}</span><span class="risk-badge {sc2}">{item.get("severity","")}</span></div><div style="font-weight:500;font-size:0.9rem;margin-bottom:0.25rem">{item.get("action","")}</div><div style="font-size:0.82rem;color:#64748b">Trigger: {item.get("trigger","")}</div><div style="font-size:0.82rem;color:#16a34a;margin-top:0.2rem">{item.get("impact","")}</div></div>',unsafe_allow_html=True)
         st.markdown("</div>",unsafe_allow_html=True)
 
-with tabs[1]:
+with tabs[2]:
     if not st.session_state.done: st.info("Upload data and Run Full Analysis.")
     else:
         render_health_banner(show_modules=["Demand Forecasting"])
@@ -857,7 +1065,7 @@ with tabs[1]:
                 st.markdown(f'<div class="news-card"><div style="font-size:0.9rem;font-weight:500">{a["title"]}</div><div style="font-size:0.75rem;color:#94a3b8">{a["source"]} {a["published"]}</div><div style="margin-top:0.3rem">{tags}</div></div>',unsafe_allow_html=True)
             st.markdown("</div>",unsafe_allow_html=True)
 
-with tabs[3]:
+with tabs[4]:
     if not st.session_state.done: st.info("Upload data and Run Full Analysis.")
     else:
         render_health_banner(show_modules=["Billing & Revenue Mgmt","Post-Sales & Financial Closure"])
@@ -971,7 +1179,7 @@ with tabs[3]:
             st.markdown("</div>",unsafe_allow_html=True)
 
 # ==================== TAB 8: CASH APP & LTV ====================
-with tabs[4]:
+with tabs[5]:
     if not st.session_state.done: st.info("Upload data and Run Full Analysis.")
     else:
         render_health_banner(show_modules=["Post-Sales & Financial Closure"])
