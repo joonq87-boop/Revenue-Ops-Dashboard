@@ -385,6 +385,188 @@ def sample_o2c(region):
 
 def scolor(s): return "#16a34a" if s>=70 else "#ea580c" if s>=45 else "#dc2626"
 
+# Plain-English insights for each maturity question, keyed by (question_key, answer_index)
+MATURITY_INSIGHTS = {
+    "df_method": [
+        "You're forecasting in spreadsheets — manual processes typically produce 25-40% error rates. ML-assisted forecasting can cut this in half.",
+        "Your ERP gives you a baseline, but basic modules lack external signals. Adding context data (promotions, seasonality) could improve accuracy by 10-15%.",
+        "You have dedicated planning tools — that puts you ahead of most SEA mid-market. The next step is layering in AI ensemble models.",
+        "AI-assisted forecasting is best-in-class. Your tools are not the bottleneck."
+    ],
+    "df_tracking": [
+        "You're not tracking forecast accuracy — you can't improve what you can't measure. Even monthly MAPE tracking would surface quick wins.",
+        "Occasional reviews catch big misses but miss slow drift. Moving to monthly tracking would surface systematic bias earlier.",
+        "Monthly reviews are solid practice. Real-time dashboards would let you catch deviations within the planning cycle, not after.",
+        "Real-time accuracy tracking is best-in-class. Your visibility is not the bottleneck."
+    ],
+    "df_customer_data": [
+        "Less than 25% of customers provide usable forecasts — you're essentially guessing demand. Even partial customer signals dramatically improve accuracy.",
+        "25-50% customer data coverage leaves significant blind spots. Distributor portals could close the gap without heavy integration.",
+        "50-75% coverage is strong. Focus on the top 20% of customers who drive 80% of volume to maximise signal quality.",
+        "75%+ customer data coverage is excellent — your demand signal is not the bottleneck."
+    ],
+    "om_channel": [
+        "Phone and email orders require manual re-keying — this is the #1 source of order errors. Every re-key is a potential dispute downstream.",
+        "Basic portals reduce some manual entry, but format inconsistency still causes parsing errors. Unified ingestion is the fix.",
+        "EDI integration eliminates most re-keying. The remaining gap is non-EDI channels (WhatsApp, email) that bypass the system.",
+        "Fully automated multi-channel intake is best-in-class. Your order capture is not the bottleneck."
+    ],
+    "om_validation": [
+        "Fully manual validation means errors reach the ERP — and cascade into wrong shipments, wrong invoices, and disputes.",
+        "Partial validation catches some issues, but exceptions still slip through. Full ATP + credit + price validation would close the gap.",
+        "Mostly automated validation is strong. Focus on the exception handling — the 5-10% that escapes automation causes outsized damage.",
+        "Fully automated with exception routing is best-in-class. Your validation is not the bottleneck."
+    ],
+    "om_amendments": [
+        "Over 30% amendment rate means your order process is being used as a draft system. Each amendment costs processing time and risks errors.",
+        "15-30% amendments are common in SEA but still expensive. Order confirmation workflows with cut-off rules can reduce this significantly.",
+        "5-15% amendments are within industry norm. Focus on reducing the ones that happen after production commitment — those are the costly ones.",
+        "Below 5% amendments is excellent discipline — your change management is not the bottleneck."
+    ],
+    "fl_otif": [
+        "If you're not tracking OTIF, you don't know if customers are getting what they ordered on time. This is the most basic fulfilment metric.",
+        "Informal estimates give you a rough picture but can't identify root causes. Formal tracking by customer, SKU, and route reveals where to act.",
+        "Monthly formal tracking is solid. Real-time OTIF dashboards would let you intervene on at-risk shipments before they become failures.",
+        "Real-time OTIF tracking is best-in-class. Your fulfilment visibility is not the bottleneck."
+    ],
+    "fl_wms": [
+        "Paper-based warehouse management limits pick accuracy and throughput. Even a basic WMS would reduce mispicks and speed up dispatch.",
+        "Basic WMS handles tracking but not optimisation. Wave planning and route-optimised picking could improve throughput 15-20%.",
+        "Advanced WMS with optimisation is strong. The next level is predictive allocation — pre-positioning stock based on forecast signals.",
+        "Automated/robotics-assisted warehouse is best-in-class. Your warehouse operations are not the bottleneck."
+    ],
+    "fl_visibility": [
+        "No shipment visibility means you can't proactively manage delivery exceptions. Customers find out about delays before you do.",
+        "Partial visibility via carrier websites is reactive and fragmented. Integrated tracking across carriers gives you a single view.",
+        "Full tracking integration is strong. Predictive ETA with proactive alerts would let you manage exceptions before customers escalate.",
+        "Predictive ETA with alerts is best-in-class. Your logistics visibility is not the bottleneck."
+    ],
+    "br_invoicing": [
+        "Manual invoice creation is the #1 cause of billing delays. Every day between shipment and invoice is a day added to DSO.",
+        "Semi-automated from ERP helps, but the manual trigger step still adds 24-48 hours. Auto-trigger on ePOD confirmation would eliminate this.",
+        "Auto-generated on shipment is strong. Adding compliance checks (price validation, tax, documentation) before release would reduce disputes.",
+        "Touchless invoicing with compliance checks is best-in-class. Your billing speed is not the bottleneck."
+    ],
+    "br_discount": [
+        "No discount controls means sales staff apply ad-hoc discounts with no governance — revenue leakage is systematic and invisible.",
+        "Basic approval workflows catch some deviations, but retroactive approvals still slip through. Rules-based engines enforce at point of sale.",
+        "Rules-based discount governance is strong. AI anomaly detection would flag unusual patterns (e.g., consistent max-discount on specific accounts).",
+        "AI-governed discount controls are best-in-class. Your pricing discipline is not the bottleneck."
+    ],
+    "br_portal": [
+        "No customer portal capability means all invoice submission is manual — this is acceptable for some industries but adds DSO for portal-dependent customers.",
+        "Manual uploads per customer don't scale. Each portal has different rules, formats, and submission windows that staff must memorise.",
+        "Partially automated portal handling reduces effort. Full automation with per-customer rule engines eliminates submission delays entirely.",
+        "Fully automated per-customer portal rules are best-in-class. Your submission process is not the bottleneck."
+    ],
+    "ps_collections": [
+        "Ad-hoc collections means your AR team chases whoever shouts loudest, not whoever represents the most risk. Cash recovery is inefficient.",
+        "First-in-first-out is fair but not smart — a $500 invoice at 31 days gets chased before a $50,000 invoice at 29 days.",
+        "Prioritising by amount is better, but misses payment behaviour. A customer who always pays at 60 days doesn't need chasing at 31.",
+        "Risk-based AI prioritisation is best-in-class. Your collections strategy is not the bottleneck."
+    ],
+    "ps_aging": [
+        "Over 20% of receivables past 90 days is a serious cash risk — write-off probability increases sharply after 90 days.",
+        "10-20% past 90 days is concerning. Predictive collections can identify at-risk invoices at 30 days and intervene early.",
+        "5-10% past 90 days is within industry norm. Focus on reducing the 60-90 day bucket to prevent migration.",
+        "Below 5% past 90 days is excellent — your aging profile is not the bottleneck."
+    ],
+    "ps_cash_app": [
+        "Fully manual cash application is slow and error-prone — unmatched payments sit in suspense accounts, inflating apparent AR.",
+        "Partially automated matching handles clean payments but struggles with short-pays, overpays, and missing remittance references.",
+        "Mostly automated cash application is strong. AI matching for unstructured remittance advice would close the last 10-15% gap.",
+        "Fully automated with AI matching is best-in-class. Your cash application is not the bottleneck."
+    ],
+}
+
+MODULE_QUESTIONS = {
+    "Demand Forecasting": ["df_method", "df_tracking", "df_customer_data"],
+    "Order Management": ["om_channel", "om_validation", "om_amendments"],
+    "Order Fulfilment & Logistics": ["fl_otif", "fl_wms", "fl_visibility"],
+    "Billing & Revenue Mgmt": ["br_invoicing", "br_discount", "br_portal"],
+    "Post-Sales & Financial Closure": ["ps_collections", "ps_aging", "ps_cash_app"],
+}
+
+MODULE_ICONS = {"Demand Forecasting":"📦","Order Management":"📋","Order Fulfilment & Logistics":"🚚","Billing & Revenue Mgmt":"💰","Post-Sales & Financial Closure":"🏦"}
+
+def render_health_banner(highlight_modules=None):
+    """Render the O2C Health Check banner. highlight_modules = list of module names to expand."""
+    if not st.session_state.done or not st.session_state.mod_scores:
+        return
+    ms = st.session_state.mod_scores
+    diag = st.session_state.diag_responses
+    ds = get_diag_scores(diag)
+
+    # Find biggest opportunity (largest gap between data potential and maturity)
+    data_scores = {"Demand Forecasting":min(100,round(st.session_state.dm["accuracy"]*0.7+max(0,20-abs(st.session_state.dm["bias"]))*1.5)),"Order Management":max(0,min(100,round(100-st.session_state.om["err"]*5-st.session_state.om["disp"]*3-st.session_state.om["amend"]*0.5))),"Order Fulfilment & Logistics":max(0,min(100,round(st.session_state.fl["otif"]*0.8+max(0,10-st.session_state.fl["return_rate"])*2))),"Billing & Revenue Mgmt":max(0,min(100,round(100-st.session_state.bl["err"]*8-st.session_state.bl["disp"]*4))),"Post-Sales & Financial Closure":st.session_state.ps["score"]}
+    gaps = {m: data_scores[m] - ds.get(m, 50) for m in data_scores}
+    biggest_opp = max(gaps, key=gaps.get) if any(v > 0 for v in gaps.values()) else None
+    lowest_mod = min(ms, key=ms.get)
+
+    # Banner header
+    if biggest_opp and gaps[biggest_opp] > 10:
+        opp_text = f"<strong>Biggest unlock: {biggest_opp}</strong> — your data shows potential (score: {data_scores[biggest_opp]}) but current processes are holding you back (maturity: {ds[biggest_opp]}). Closing this gap is your highest-ROI move."
+    else:
+        opp_text = f"<strong>Priority area: {lowest_mod}</strong> — scoring {ms[lowest_mod]}/100. Focus improvement efforts here for the greatest impact on your O2C cycle."
+
+    with st.expander("🏥 Your O2C Health Check — how your current processes impact your scores", expanded=(highlight_modules is not None)):
+        st.markdown(f'<div style="background:linear-gradient(135deg,#eff6ff,#f0f9ff);border:1px solid #bfdbfe;border-radius:12px;padding:0.85rem 1.1rem;font-size:0.84rem;color:#1e40af;margin-bottom:1rem">{opp_text}</div>',unsafe_allow_html=True)
+
+        for mod_name in ms:
+            is_highlight = highlight_modules and mod_name in highlight_modules
+            data_sc = data_scores.get(mod_name, 50)
+            mat_sc = ds.get(mod_name, 50)
+            blended = ms[mod_name]
+            icon = MODULE_ICONS.get(mod_name, "")
+            sc = scolor(blended)
+            # Gauge bar
+            drag = data_sc - blended
+            drag_text = f"Process maturity is dragging your score down by {drag} points" if drag > 5 else f"Your processes match your data quality" if drag <= 2 else f"Minor process gap — {drag} points below data potential"
+            drag_color = "#dc2626" if drag > 15 else "#f59e0b" if drag > 5 else "#16a34a"
+
+            st.markdown(f'''<div style="background:white;border:1px solid rgba(226,232,240,0.7);border-radius:12px;padding:1rem 1.2rem;margin-bottom:{"0.75rem" if is_highlight else "0.5rem"};{"border-left:3px solid "+sc if is_highlight else ""}">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+                    <div style="font-size:0.82rem;font-weight:600;color:#0f172a">{icon} {mod_name}</div>
+                    <div style="display:flex;align-items:center;gap:12px">
+                        <span style="font-size:0.7rem;color:#64748b">Data: <span style="font-family:JetBrains Mono;font-weight:600;color:#0369a1">{data_sc}</span></span>
+                        <span style="font-size:0.7rem;color:#64748b">Maturity: <span style="font-family:JetBrains Mono;font-weight:600;color:{drag_color}">{mat_sc}</span></span>
+                        <span style="font-family:JetBrains Mono;font-size:1.1rem;font-weight:700;color:{sc}">{blended}</span>
+                    </div>
+                </div>
+                <div style="position:relative;height:8px;background:#f1f5f9;border-radius:6px;overflow:hidden;margin-bottom:0.4rem">
+                    <div style="position:absolute;left:0;top:0;height:100%;width:{blended}%;background:{sc};border-radius:6px;transition:width 0.3s"></div>
+                    <div style="position:absolute;left:0;top:0;height:100%;width:{data_sc}%;border-right:2px dashed #0369a1;opacity:0.5"></div>
+                </div>
+                <div style="font-size:0.72rem;color:{drag_color};font-weight:500">{drag_text}</div>
+            </div>''',unsafe_allow_html=True)
+
+            # Expanded question detail for highlighted modules
+            if is_highlight:
+                q_keys = MODULE_QUESTIONS.get(mod_name, [])
+                for qk in q_keys:
+                    ans_idx = diag.get(qk, 0)
+                    # Find the question text from DIAGNOSTIC
+                    q_text = ""
+                    ans_text = ""
+                    for mod_d, qs in DIAGNOSTIC.items():
+                        for q in qs:
+                            if q["key"] == qk:
+                                q_text = q["q"]
+                                ans_text = q["opts"][ans_idx]
+                                break
+                    insight = MATURITY_INSIGHTS.get(qk, ["","","",""])[ans_idx]
+                    level = ans_idx + 1
+                    level_label = ["Basic", "Developing", "Established", "Advanced"][ans_idx]
+                    level_color = ["#dc2626", "#f59e0b", "#0369a1", "#16a34a"][ans_idx]
+                    st.markdown(f'''<div style="margin-left:1.5rem;padding:0.5rem 0.75rem;border-left:2px solid #e2e8f0;margin-bottom:0.4rem">
+                        <div style="font-size:0.75rem;color:#64748b;margin-bottom:2px">{q_text}</div>
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+                            <span style="font-size:0.78rem;font-weight:600;color:#0f172a">{ans_text}</span>
+                            <span style="font-size:0.62rem;font-weight:600;padding:2px 8px;border-radius:10px;background:{"#fef2f2" if level<=1 else "#fffbeb" if level<=2 else "#eff6ff" if level<=3 else "#f0fdf4"};color:{level_color}">Level {level}: {level_label}</span>
+                        </div>
+                        <div style="font-size:0.75rem;color:#475569;line-height:1.5">{insight}</div>
+                    </div>''',unsafe_allow_html=True)
+
 DEFS={"fc_df":None,"o2c_df":None,"fc_hash":None,"o2c_hash":None,"dm":None,"om":None,"fl":None,"bl":None,"ps":None,"mod_scores":None,"ai_exec":None,"ai_agents":None,"done":False,"news":None,"wb":None,"gt":None,"market_ai":None,"market_fetched":False,"region":"Singapore","industry":"F&B / FMCG","diag_responses":{},"inv_days":45,"dpo_days":30,"display_ccy":"USD","ltv":None,"cash_app":None,"disputes":None,"order_ingest":None,"invoice_demo":None}
 for k,v in DEFS.items():
     if k not in st.session_state: st.session_state[k]=v
@@ -491,6 +673,7 @@ with tabs[0]:
 with tabs[2]:
     if not st.session_state.done: st.info("Complete Setup and click Run Full Analysis.")
     else:
+        render_health_banner(highlight_modules=["Demand Forecasting","Order Management","Order Fulfilment & Logistics","Billing & Revenue Mgmt","Post-Sales & Financial Closure"])
         ai=st.session_state.ai_exec or {}; bl=st.session_state.bl; ps=st.session_state.ps; s=ai.get("health_score",0)
         if st.session_state.market_fetched and st.session_state.market_ai:
             ms_t=st.session_state.market_ai.get("market_summary","")
@@ -580,6 +763,7 @@ with tabs[2]:
 with tabs[1]:
     if not st.session_state.done: st.info("Upload data and Run Full Analysis.")
     else:
+        render_health_banner(highlight_modules=["Demand Forecasting"])
         dm=st.session_state.dm; ob=INDUSTRIES[industry]["otif_benchmark"]
         c1,c2,c3,c4=st.columns(4)
         with c1: st.markdown(mcard("Forecast Accuracy",f'{dm["accuracy"]}%',"Target: 85-90%","good" if dm["accuracy"]>=85 else "bad","Formula: 100 - MAPE. Higher = closer to actual demand.","Target: Normality SoW (65%→90%+); Expert Interview confirmed no tracking","metric-card metric-card-blue"),unsafe_allow_html=True)
@@ -674,6 +858,7 @@ with tabs[1]:
 with tabs[3]:
     if not st.session_state.done: st.info("Upload data and Run Full Analysis.")
     else:
+        render_health_banner(highlight_modules=["Billing & Revenue Mgmt","Post-Sales & Financial Closure"])
         bl=st.session_state.bl; lpct=round((bl["leak_total"]/max(bl["rev"],1))*100,1)
         c1,c2,c3,c4=st.columns(4)
         with c1: st.markdown(mcard("DSO",f'{bl["dso"]}d',f'{bl["gap"]:+.0f}d vs {bl["bench"]}d',"good" if bl["gap"]<=0 else "bad","Avg DSO_Days. Days from invoice to payment.",f"Bench: {bl['bench']}d for {industry}. Source: APQC; McKinsey O2C Optimization","metric-card metric-card-blue"),unsafe_allow_html=True)
@@ -787,6 +972,7 @@ with tabs[3]:
 with tabs[4]:
     if not st.session_state.done: st.info("Upload data and Run Full Analysis.")
     else:
+        render_health_banner(highlight_modules=["Post-Sales & Financial Closure"])
         ltv_df = st.session_state.ltv
         ca = st.session_state.cash_app
         if ltv_df is not None and len(ltv_df) > 0:
