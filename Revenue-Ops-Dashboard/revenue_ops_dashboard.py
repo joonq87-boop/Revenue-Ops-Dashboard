@@ -366,22 +366,84 @@ Return ONLY valid JSON: {{"demand_signals":[{{"signal":"...","source":"...","imp
     r=client.models.generate_content(model=MODEL,contents=p); t=r.text.strip().lstrip("```json").lstrip("```").rstrip("```").strip(); return json.loads(t)
 
 def sample_demand():
-    np.random.seed(42); months=pd.date_range("2024-01-01",periods=12,freq="MS"); skus=["SKU-FMCG-001","SKU-FMCG-002","SKU-FMCG-003","SKU-FMCG-004"]; rows=[]
-    for sku in skus:
-        base=np.random.randint(800,3000)
-        for m in months:
-            a=int(base*(1+0.15*np.sin(m.month)+np.random.normal(0,0.1))); f=int(a*(1+np.random.normal(0,0.18)))
-            pl=max(10,int(a/np.random.randint(50,150))); ot=int(pl*np.random.uniform(0.75,0.95))
-            rows.append({"Month":m.strftime("%Y-%m"),"SKU":sku,"Actual_Units":a,"Forecast_Units":f,"Orders_Placed":pl,"Orders_OTIF":ot})
+    np.random.seed(42); skus=["SKU-FMCG-001","SKU-FMCG-002","SKU-FMCG-003","SKU-FMCG-004"]; rows=[]
+    for yr in [2022,2023,2024]:
+        months=pd.date_range(f"{yr}-01-01",periods=12,freq="MS")
+        err_scale={2022:0.25,2023:0.18,2024:0.12}[yr]
+        for sku in skus:
+            base=np.random.randint(800,3000); sku_noise=0.05 if sku!="SKU-FMCG-002" else 0.15
+            for m in months:
+                seasonal=0.15*np.sin((m.month-1)/12*2*np.pi)+0.08*np.sin((m.month-1)/12*4*np.pi)
+                cny_bump=0.12 if m.month in [1,2] else 0
+                a=int(base*(1+seasonal+cny_bump+np.random.normal(0,sku_noise))*(1+0.05*(yr-2022)))
+                f=int(a*(1+np.random.normal(0,err_scale)))
+                pl=max(10,int(a/np.random.randint(50,150))); ot_rate={2022:0.78,2023:0.84,2024:0.88}[yr]
+                ot=int(pl*np.random.uniform(ot_rate-0.08,min(ot_rate+0.05,0.98)))
+                rows.append({"Month":m.strftime("%Y-%m"),"SKU":sku,"Actual_Units":a,"Forecast_Units":f,"Orders_Placed":pl,"Orders_OTIF":ot})
     return pd.DataFrame(rows)
 
 def sample_o2c(region):
     np.random.seed(42); custs=REGION_CUSTOMERS.get(region,REGION_CUSTOMERS["Singapore"]); rows=[]
-    for i in range(80):
-        od=datetime(2024,1,1)+timedelta(days=random.randint(0,364)); cd=random.randint(1,8); fd=random.randint(1,6)
-        inv=od+timedelta(days=cd); pay=inv+timedelta(days=random.randint(15,120))
-        rows.append({"Order_ID":f"ORD-{1000+i}","Customer":random.choice(custs),"Order_Date":od.strftime("%Y-%m-%d"),"Invoice_Date":inv.strftime("%Y-%m-%d"),"Payment_Date":pay.strftime("%Y-%m-%d"),"Invoice_Amount_USD":round(random.uniform(5000,80000),2),"DSO_Days":(pay-inv).days,"Order_Cycle_Days":cd,"Fulfilment_Days":fd,"Invoice_Errors":random.choice([0,0,0,1]),"Disputed":random.choice([0,0,0,0,1]),"OTIF_Flag":random.choice([1,1,1,1,0]),"Return_Flag":random.choice([0,0,0,0,0,0,0,1]),"Amendment_Flag":random.choice([0,0,0,1]),"Deduction_USD":round(random.choice([0,0,0,0,random.uniform(50,500)]),2)})
+    oid=1000
+    for yr in [2022,2023,2024]:
+        dso_base={2022:58,2023:52,2024:47}[yr]; err_rate={2022:0.30,2023:0.22,2024:0.18}[yr]
+        disp_rate={2022:0.25,2023:0.18,2024:0.14}[yr]; amend_rate={2022:0.30,2023:0.22,2024:0.18}[yr]
+        for mo in range(1,13):
+            n_orders=random.randint(18,24)
+            for _ in range(n_orders):
+                od=datetime(yr,mo,1)+timedelta(days=random.randint(0,27))
+                cd=random.randint(1,8); fd=random.randint(1,6)
+                inv=od+timedelta(days=cd)
+                dso_jitter=int(np.random.normal(dso_base,dso_base*0.3))
+                dso_jitter=max(10,min(dso_jitter,180))
+                pay=inv+timedelta(days=dso_jitter)
+                amt=round(random.uniform(5000,80000),2)
+                rows.append({"Order_ID":f"ORD-{oid}","Customer":random.choice(custs),"Order_Date":od.strftime("%Y-%m-%d"),"Invoice_Date":inv.strftime("%Y-%m-%d"),"Payment_Date":pay.strftime("%Y-%m-%d"),"Invoice_Amount_USD":amt,"DSO_Days":dso_jitter,"Order_Cycle_Days":cd,"Fulfilment_Days":fd,"Invoice_Errors":1 if random.random()<err_rate else 0,"Disputed":1 if random.random()<disp_rate else 0,"OTIF_Flag":1 if random.random()>0.12 else 0,"Return_Flag":1 if random.random()<0.08 else 0,"Amendment_Flag":1 if random.random()<amend_rate else 0,"Deduction_USD":round(random.uniform(50,500) if random.random()<0.15 else 0,2),"Inventory_Days":45,"DPO_Days":30})
+                oid+=1
     return pd.DataFrame(rows)
+
+def sample_maturity(region="Singapore",industry="F&B / FMCG",currency="USD"):
+    """Generate maturity assessment CSV with defaults (Level 1 for most — shows drag in demo)."""
+    rows=[
+        {"Parameter":"region","Value":region},{"Parameter":"industry","Value":industry},{"Parameter":"currency","Value":currency},
+        {"Parameter":"df_method","Value":"0"},{"Parameter":"df_tracking","Value":"1"},{"Parameter":"df_customer_data","Value":"0"},
+        {"Parameter":"om_channel","Value":"0"},{"Parameter":"om_validation","Value":"0"},{"Parameter":"om_amendments","Value":"0"},
+        {"Parameter":"fl_otif","Value":"1"},{"Parameter":"fl_wms","Value":"0"},{"Parameter":"fl_visibility","Value":"1"},
+        {"Parameter":"br_invoicing","Value":"0"},{"Parameter":"br_discount","Value":"0"},{"Parameter":"br_portal","Value":"1"},
+        {"Parameter":"ps_collections","Value":"0"},{"Parameter":"ps_aging","Value":"1"},{"Parameter":"ps_cash_app","Value":"0"},
+    ]
+    return pd.DataFrame(rows)
+
+def parse_maturity_csv(df):
+    """Parse maturity CSV into region, industry, currency, diag_responses, inv_days, dpo_days."""
+    params=dict(zip(df["Parameter"],df["Value"]))
+    region=params.get("region","Singapore"); industry=params.get("industry","F&B / FMCG"); currency=params.get("currency","USD")
+    diag={}; q_keys=["df_method","df_tracking","df_customer_data","om_channel","om_validation","om_amendments","fl_otif","fl_wms","fl_visibility","br_invoicing","br_discount","br_portal","ps_collections","ps_aging","ps_cash_app"]
+    for k in q_keys: diag[k]=int(params.get(k,0))
+    return region, industry, currency, diag
+
+def filter_by_year(df, year, date_col="Order_Date"):
+    """Filter dataframe by year. Returns full df if year=='All'."""
+    if year == "All": return df
+    dc = pd.to_datetime(df[date_col])
+    return df[dc.dt.year == int(year)]
+
+def filter_demand_by_year(df, year):
+    if year == "All": return df
+    return df[df["Month"].str.startswith(str(year))]
+
+def get_available_years(df, date_col="Order_Date"):
+    """Extract unique years from dataframe."""
+    try:
+        years = sorted(pd.to_datetime(df[date_col]).dt.year.unique().tolist())
+        return ["All"] + [str(y) for y in years]
+    except: return ["All"]
+
+def get_demand_years(df):
+    try:
+        years = sorted(df["Month"].str[:4].unique().tolist())
+        return ["All"] + years
+    except: return ["All"]
 
 def scolor(s): return "#16a34a" if s>=70 else "#ea580c" if s>=45 else "#dc2626"
 
@@ -569,7 +631,7 @@ def render_health_banner(show_modules):
         </div>''',unsafe_allow_html=True)
     st.markdown('<div style="height:8px"></div>',unsafe_allow_html=True)
 
-DEFS={"fc_df":None,"o2c_df":None,"fc_hash":None,"o2c_hash":None,"dm":None,"om":None,"fl":None,"bl":None,"ps":None,"mod_scores":None,"ai_exec":None,"ai_agents":None,"done":False,"news":None,"wb":None,"gt":None,"market_ai":None,"market_fetched":False,"region":"Singapore","industry":"F&B / FMCG","diag_responses":{},"inv_days":45,"dpo_days":30,"display_ccy":"USD","ltv":None,"cash_app":None,"disputes":None,"order_ingest":None,"invoice_demo":None}
+DEFS={"fc_df":None,"o2c_df":None,"maturity_df":None,"fc_hash":None,"o2c_hash":None,"mat_hash":None,"dm":None,"om":None,"fl":None,"bl":None,"ps":None,"mod_scores":None,"ai_exec":None,"ai_agents":None,"done":False,"news":None,"wb":None,"gt":None,"market_ai":None,"market_fetched":False,"region":"Singapore","industry":"F&B / FMCG","diag_responses":{},"inv_days":45,"dpo_days":30,"display_ccy":"USD","ltv":None,"cash_app":None,"disputes":None,"order_ingest":None,"invoice_demo":None,"yearly_metrics":None}
 for k,v in DEFS.items():
     if k not in st.session_state: st.session_state[k]=v
 def reset():
@@ -593,67 +655,74 @@ with h5:
 tabs=st.tabs(["⚙ Setup","🏥 Executive Health Report","📊 ForecastIQ Dashboard","📋 O2C Performance Hub","💰 CFO Dashboard","🏦 Cash App & LTV Engine"])
 
 with tabs[0]:
-    st.markdown('<div style="font-size:1.3rem;font-weight:700;color:#0c1222;letter-spacing:-0.02em">Setup & Configuration</div><div style="font-size:0.88rem;color:#64748b;margin-bottom:1.5rem">Upload data, complete maturity assessment, then run analysis.</div>',unsafe_allow_html=True)
-    # --- Downloadable CSV Templates ---
-    st.markdown('<div class="section-card"><div class="section-title">Data Templates — Download & Fill</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.75rem">Download these CSV templates to see the exact format expected. Fill with your data and re-upload, or click Demo Data to use sample data.</div>',unsafe_allow_html=True)
-    tpl1,tpl2=st.columns(2)
+    st.markdown('<div style="font-size:1.3rem;font-weight:700;color:#0c1222;letter-spacing:-0.02em">Setup & Configuration</div><div style="font-size:0.88rem;color:#64748b;margin-bottom:1.5rem">Upload three data files and click Run. No manual configuration needed.</div>',unsafe_allow_html=True)
+    st.markdown('<div class="section-card"><div class="section-title">Data Templates — Download & Fill</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.75rem">Download templates, fill with your data, re-upload. Or click Load Demo Data for pre-built 3-year sample (2022–2024).</div>',unsafe_allow_html=True)
+    tpl1,tpl2,tpl3=st.columns(3)
     with tpl1:
         tpl_fc = sample_demand()
-        st.download_button("⬇ Download Demand & Forecast Template", tpl_fc.to_csv(index=False).encode('utf-8'), "demand_forecast_template.csv", "text/csv", key="dl_fc", use_container_width=True)
-        st.markdown('<div style="font-size:0.75rem;color:#94a3b8;margin-top:0.25rem">Columns: Month, SKU, Actual_Units, Forecast_Units, Orders_Placed, Orders_OTIF — 48 rows (4 SKUs × 12 months)</div>',unsafe_allow_html=True)
+        st.download_button("⬇ Demand & Forecast", tpl_fc.to_csv(index=False).encode("utf-8"), "demand_forecast_template.csv", "text/csv", key="dl_fc", use_container_width=True)
+        st.markdown(f'<div style="font-size:0.72rem;color:#94a3b8;margin-top:0.2rem">{len(tpl_fc)} rows · 4 SKUs × 36 months</div>',unsafe_allow_html=True)
     with tpl2:
-        tpl_o2c = sample_o2c(region)
-        st.download_button("⬇ Download Order-to-Cash Template", tpl_o2c.to_csv(index=False).encode('utf-8'), "order_to_cash_template.csv", "text/csv", key="dl_o2c", use_container_width=True)
-        st.markdown('<div style="font-size:0.75rem;color:#94a3b8;margin-top:0.25rem">Columns: Order_ID, Customer, Order_Date, Invoice_Date, Payment_Date, Invoice_Amount_USD, DSO_Days, + flags — 80 rows</div>',unsafe_allow_html=True)
+        tpl_o2c = sample_o2c("Singapore")
+        st.download_button("⬇ Order-to-Cash", tpl_o2c.to_csv(index=False).encode("utf-8"), "order_to_cash_template.csv", "text/csv", key="dl_o2c", use_container_width=True)
+        st.markdown(f'<div style="font-size:0.72rem;color:#94a3b8;margin-top:0.2rem">{len(tpl_o2c)} rows · ~20 orders/month × 36 months</div>',unsafe_allow_html=True)
+    with tpl3:
+        tpl_mat = sample_maturity()
+        st.download_button("⬇ Maturity Assessment", tpl_mat.to_csv(index=False).encode("utf-8"), "maturity_assessment_template.csv", "text/csv", key="dl_mat", use_container_width=True)
+        st.markdown('<div style="font-size:0.72rem;color:#94a3b8;margin-top:0.2rem">18 rows · region, industry, currency + 15 maturity levels</div>',unsafe_allow_html=True)
     st.markdown("</div>",unsafe_allow_html=True)
-    c1,c2=st.columns(2)
-    with c1:
-        st.markdown('<div class="section-card"><div class="section-title">Demand & Forecast CSV</div>',unsafe_allow_html=True)
-        st.markdown("**Required:** `Month` `SKU` `Actual_Units` `Forecast_Units` | **Optional:** `Orders_Placed` `Orders_OTIF`")
-        uf=st.file_uploader("Forecast",type=["csv"],key="fc_up",label_visibility="collapsed")
-        if uf:
-            try:
-                df=pd.read_csv(uf); h=str(hash(df.to_json())); miss=[c for c in ["Month","SKU","Actual_Units","Forecast_Units"] if c not in df.columns]
-                if not miss: st.session_state.fc_df=df; st.session_state.fc_hash=h; st.session_state.done=False; st.success(f"{len(df)} rows loaded")
-                else: st.error(f"Missing: {miss}")
-            except Exception as e: st.error(str(e))
-        elif st.session_state.fc_df is not None: st.success(f"{len(st.session_state.fc_df)} rows ready")
-        else: st.markdown('<div class="upload-hint">Upload CSV or click Demo Data</div>',unsafe_allow_html=True)
-        st.markdown("</div>",unsafe_allow_html=True)
-    with c2:
-        st.markdown('<div class="section-card"><div class="section-title">Order-to-Cash CSV</div>',unsafe_allow_html=True)
-        st.markdown("**Required:** `Order_ID` `Customer` `Invoice_Amount_USD` `DSO_Days` | **Optional:** `Order_Cycle_Days` `Fulfilment_Days` `OTIF_Flag` `Return_Flag`")
-        uo=st.file_uploader("O2C",type=["csv"],key="o2c_up",label_visibility="collapsed")
-        if uo:
-            try:
-                df=pd.read_csv(uo); h=str(hash(df.to_json())); miss=[c for c in ["Order_ID","Customer","Invoice_Amount_USD","DSO_Days"] if c not in df.columns]
-                if not miss: st.session_state.o2c_df=df; st.session_state.o2c_hash=h; st.session_state.done=False; st.success(f"{len(df)} rows loaded")
-                else: st.error(f"Missing: {miss}")
-            except Exception as e: st.error(str(e))
-        elif st.session_state.o2c_df is not None: st.success(f"{len(st.session_state.o2c_df)} rows ready")
-        else: st.markdown('<div class="upload-hint">Upload CSV or click Demo Data</div>',unsafe_allow_html=True)
-        st.markdown("</div>",unsafe_allow_html=True)
-    st.markdown('<div class="section-card"><div class="section-title">Working Capital Inputs</div>',unsafe_allow_html=True)
-    wc1,wc2=st.columns(2)
-    with wc1: inv_d=st.number_input("Inventory Days",0,365,st.session_state.inv_days); st.session_state.inv_days=inv_d
-    with wc2: dpo_d=st.number_input("DPO",0,180,st.session_state.dpo_days); st.session_state.dpo_days=dpo_d
+    st.markdown('<div class="section-card"><div class="section-title">Upload Your Data</div>',unsafe_allow_html=True)
+    u1,u2,u3=st.columns(3)
+    with u1:
+        uf1=st.file_uploader("Demand & Forecast CSV",type=["csv"],key="fu_fc")
+        if uf1:
+            h=hash(uf1.read()); uf1.seek(0)
+            if h!=st.session_state.fc_hash:
+                st.session_state.fc_df=pd.read_csv(uf1); st.session_state.fc_hash=h; st.session_state.done=False
+            st.success(f"✓ {len(st.session_state.fc_df)} rows loaded")
+    with u2:
+        uf2=st.file_uploader("Order-to-Cash CSV",type=["csv"],key="fu_o2c")
+        if uf2:
+            h=hash(uf2.read()); uf2.seek(0)
+            if h!=st.session_state.o2c_hash:
+                st.session_state.o2c_df=pd.read_csv(uf2); st.session_state.o2c_hash=h; st.session_state.done=False
+                if "Inventory_Days" in st.session_state.o2c_df.columns: st.session_state.inv_days=int(st.session_state.o2c_df["Inventory_Days"].iloc[0])
+                if "DPO_Days" in st.session_state.o2c_df.columns: st.session_state.dpo_days=int(st.session_state.o2c_df["DPO_Days"].iloc[0])
+            st.success(f"✓ {len(st.session_state.o2c_df)} rows loaded")
+    with u3:
+        uf3=st.file_uploader("Maturity Assessment CSV",type=["csv"],key="fu_mat")
+        if uf3:
+            h=hash(uf3.read()); uf3.seek(0)
+            if h!=st.session_state.mat_hash:
+                st.session_state.maturity_df=pd.read_csv(uf3); st.session_state.mat_hash=h; st.session_state.done=False
+                r,ind,cur,diag=parse_maturity_csv(st.session_state.maturity_df)
+                st.session_state.region=r; st.session_state.industry=ind; st.session_state.display_ccy=cur; st.session_state.diag_responses=diag
+            st.success(f"✓ Config: {st.session_state.region}, {st.session_state.industry}")
     st.markdown("</div>",unsafe_allow_html=True)
-    st.markdown('<div class="section-card"><div class="section-title">Process Maturity Assessment</div>',unsafe_allow_html=True)
-    st.markdown('<div class="info-box">Rate capabilities across 5 modules. Shapes maturity score and AI recommendations.</div>',unsafe_allow_html=True)
-    for mn,qs in DIAGNOSTIC.items():
-        st.markdown(f"**{mn}**")
-        for q in qs:
-            idx=st.selectbox(q["q"],options=list(range(len(q["opts"]))),format_func=lambda x,o=q["opts"]:o[x],index=st.session_state.diag_responses.get(q["key"],0),key=f"d_{q['key']}")
-            st.session_state.diag_responses[q["key"]]=idx
-        st.markdown("---")
-    st.markdown("</div>",unsafe_allow_html=True)
-    if st.session_state.fc_df is not None and st.session_state.o2c_df is not None:
-        bc1,bc2,_=st.columns([1,1,1])
-        with bc1:
+    b1,b2,b3=st.columns([1,1,1])
+    with b1:
+        if st.button("Load Demo Data",use_container_width=True):
+            st.session_state.fc_df=sample_demand(); st.session_state.o2c_df=sample_o2c("Singapore"); st.session_state.maturity_df=sample_maturity()
+            r,ind,cur,diag=parse_maturity_csv(st.session_state.maturity_df)
+            st.session_state.region=r; st.session_state.industry=ind; st.session_state.display_ccy=cur; st.session_state.diag_responses=diag
+            if "Inventory_Days" in st.session_state.o2c_df.columns: st.session_state.inv_days=int(st.session_state.o2c_df["Inventory_Days"].iloc[0])
+            if "DPO_Days" in st.session_state.o2c_df.columns: st.session_state.dpo_days=int(st.session_state.o2c_df["DPO_Days"].iloc[0])
+            st.session_state.fc_hash="s"; st.session_state.o2c_hash="s"; st.session_state.mat_hash="s"; st.session_state.done=False; st.rerun()
+    with b2:
+        if st.session_state.fc_df is not None and st.session_state.o2c_df is not None:
             if st.button("Run Full Analysis",use_container_width=True):
+                region=st.session_state.region; industry=st.session_state.industry; ccy=st.session_state.display_ccy
+                inv_d=st.session_state.inv_days; dpo_d=st.session_state.dpo_days
                 ds=get_diag_scores(st.session_state.diag_responses)
                 with st.spinner("Computing..."): st.session_state.dm=calc_demand(st.session_state.fc_df); st.session_state.om=calc_order_mgmt(st.session_state.o2c_df); st.session_state.fl=calc_fulfilment(st.session_state.o2c_df,industry); st.session_state.bl=calc_billing(st.session_state.o2c_df,industry); st.session_state.ps=calc_post_sales(st.session_state.o2c_df,industry,inv_d,dpo_d); st.session_state.mod_scores=calc_module_scores(st.session_state.dm,st.session_state.om,st.session_state.fl,st.session_state.bl,st.session_state.ps,ds)
                 with st.spinner("LTV & Cash App..."): st.session_state.ltv=calc_customer_ltv(st.session_state.o2c_df,industry); st.session_state.cash_app=calc_cash_app_simulation(st.session_state.o2c_df); st.session_state.disputes=calc_dispute_workflow(st.session_state.o2c_df); st.session_state.order_ingest=generate_order_ingest_demo(region); st.session_state.invoice_demo=generate_invoice_demo(st.session_state.o2c_df,region)
+                yearly={}
+                for yr in get_demand_years(st.session_state.fc_df)[1:]:
+                    fd=filter_demand_by_year(st.session_state.fc_df,yr); od=filter_by_year(st.session_state.o2c_df,yr)
+                    if len(fd)>0 and len(od)>0:
+                        yd=calc_demand(fd); yo=calc_order_mgmt(od); yf=calc_fulfilment(od,industry); yb=calc_billing(od,industry); yp=calc_post_sales(od,industry,inv_d,dpo_d)
+                        yearly[yr]={"accuracy":yd["accuracy"],"mape":yd["mape"],"bias":yd["bias"],"otif":yd["otif"],"dso":yb["dso"],"err":yo["err"],"disp":yo["disp"],"leakage_pct":round((yb["leak_total"]/max(yb["rev"],1))*100,1),"ccc":yp["ccc"],"score":yp["score"],"rev":yb["rev"]}
+                st.session_state.yearly_metrics=yearly
                 with st.spinner("AI insights..."):
                     try: st.session_state.ai_exec=get_executive_ai(st.session_state.dm,st.session_state.om,st.session_state.fl,st.session_state.bl,st.session_state.ps,st.session_state.mod_scores,ds,region,industry,ccy)
                     except Exception as e: st.warning(f"AI error: {e}")
@@ -661,16 +730,12 @@ with tabs[0]:
                     try: st.session_state.ai_agents=get_agent_simulation(st.session_state.dm,st.session_state.om,st.session_state.fl,st.session_state.bl,st.session_state.ps,st.session_state.mod_scores,region,industry,ccy)
                     except Exception as e: st.warning(f"Agent error: {e}")
                 st.session_state.done=True; st.rerun()
-        with bc2:
-            if st.button("Fetch Market Intel",use_container_width=True):
-                with st.spinner("News..."): st.session_state.news=fetch_news(region,industry)
-                with st.spinner("World Bank..."): st.session_state.wb=fetch_wb(region,industry)
-                with st.spinner("Trends..."): st.session_state.gt=fetch_gt(INDUSTRIES[industry]["keywords"][:3],region)
-                with st.spinner("AI signals..."):
-                    try: st.session_state.market_ai=get_demand_signals_ai(region,industry,st.session_state.news or [],st.session_state.wb or {},st.session_state.gt or {})
-                    except: st.session_state.market_ai=None
-                st.session_state.market_fetched=True; st.rerun()
-        if st.session_state.done: st.success("Analysis complete — explore tabs above.")
+    with b3:
+        if st.button("Reset",use_container_width=True): reset(); st.rerun()
+    if st.session_state.fc_df is not None:
+        st.markdown(f'<div class="info-box">Data: Demand {len(st.session_state.fc_df)} rows · O2C {len(st.session_state.o2c_df) if st.session_state.o2c_df is not None else 0} rows · {st.session_state.region}, {st.session_state.industry}, {st.session_state.display_ccy} · Inv: {st.session_state.inv_days}d · DPO: {st.session_state.dpo_days}d</div>',unsafe_allow_html=True)
+    if st.session_state.done: st.success("Analysis complete — explore tabs above.")
+
 
 # ==================== TAB 1: EXECUTIVE HEALTH REPORT ====================
 with tabs[1]:
@@ -762,7 +827,42 @@ with tabs[1]:
         st.markdown('<div style="display:flex;gap:16px;margin-top:0.75rem;font-size:0.68rem;color:#94a3b8"><span>█ Blended score (what you achieve today)</span><span style="color:#0369a1">░ Data potential (if processes were optimised)</span><span style="color:#dc2626">▒ Process drag (your setup answers)</span></div>',unsafe_allow_html=True)
         st.markdown("</div>",unsafe_allow_html=True)
 
-        # === RECOMMENDATIONS ===
+        # === 3-YEAR TREND CHART ===
+        ym = st.session_state.yearly_metrics
+        if ym and len(ym) > 1:
+            st.markdown('<div class="section-card"><div class="section-title">3-Year Performance Trend</div>',unsafe_allow_html=True)
+            trend_df = pd.DataFrame([{"Year":yr,"Forecast Accuracy":v["accuracy"],"DSO":v["dso"],"OTIF":v["otif"],"Error Rate":v["err"],"CCC":v["ccc"]} for yr,v in sorted(ym.items())])
+            tc1,tc2=st.columns(2)
+            with tc1:
+                st.markdown('<div style="font-size:0.75rem;font-weight:600;color:#64748b;margin-bottom:0.3rem">Accuracy & OTIF (higher = better)</div>',unsafe_allow_html=True)
+                st.line_chart(trend_df.set_index("Year")[["Forecast Accuracy","OTIF"]],height=180)
+            with tc2:
+                st.markdown('<div style="font-size:0.75rem;font-weight:600;color:#64748b;margin-bottom:0.3rem">DSO & CCC (lower = better)</div>',unsafe_allow_html=True)
+                st.line_chart(trend_df.set_index("Year")[["DSO","CCC"]],height=180)
+            # Trend summary
+            yrs = sorted(ym.keys()); first=ym[yrs[0]]; last=ym[yrs[-1]]
+            acc_delta = last["accuracy"] - first["accuracy"]; dso_delta = last["dso"] - first["dso"]
+            st.markdown(f'<div style="display:flex;gap:16px;font-size:0.78rem;margin-top:0.5rem"><span style="color:{"#16a34a" if acc_delta>0 else "#dc2626"}">Accuracy: {acc_delta:+.1f}% ({yrs[0]}→{yrs[-1]})</span><span style="color:{"#16a34a" if dso_delta<0 else "#dc2626"}">DSO: {dso_delta:+.1f}d</span><span style="color:#64748b">OTIF: {last["otif"]-first["otif"]:+.1f}%</span><span style="color:#64748b">Error rate: {last["err"]-first["err"]:+.1f}%</span></div>',unsafe_allow_html=True)
+            st.markdown("</div>",unsafe_allow_html=True)
+
+        # === AI INSIGHT PANELS ===
+        ai_l,ai_r=st.columns(2)
+        with ai_l:
+            dm=st.session_state.dm
+            fc_insight = f'Forecast accuracy at {dm["accuracy"]}% with {dm["mape"]:.1f}% MAPE and {dm["bias"]:+.1f}% bias.'
+            if dm["accuracy"] < 85: fc_insight += f' Below 85% target — {"systematic under-forecasting" if dm["bias"]<-3 else "systematic over-forecasting" if dm["bias"]>3 else "high variance across SKUs"} is the primary driver.'
+            if ym and len(ym)>1:
+                yrs=sorted(ym.keys()); fc_insight += f' Accuracy moved {ym[yrs[-1]]["accuracy"]-ym[yrs[0]]["accuracy"]:+.1f}% over {len(ym)} years.'
+            st.markdown(f'<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 14px;font-size:0.78rem;color:#166534"><strong>📦 Demand Intelligence:</strong> {fc_insight}</div>',unsafe_allow_html=True)
+        with ai_r:
+            bl=st.session_state.bl; ps=st.session_state.ps
+            o2c_insight = f'DSO {bl["dso"]:.0f}d ({"on target" if bl["gap"]<=0 else f"{bl["gap"]:.0f}d above benchmark"}). Revenue leakage {fmtc(bl["leak_total"],ccy,True)} ({round(bl["leak_total"]/max(bl["rev"],1)*100,1)}%).'
+            if ps["aging"]["90d"] > 10: o2c_insight += f' Warning: {ps["aging"]["90d"]}% AR past 90 days.'
+            if ym and len(ym)>1:
+                yrs=sorted(ym.keys()); o2c_insight += f' DSO trend: {ym[yrs[-1]]["dso"]-ym[yrs[0]]["dso"]:+.1f}d over {len(ym)} years.'
+            st.markdown(f'<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 14px;font-size:0.78rem;color:#1e40af"><strong>💰 O2C Intelligence:</strong> {o2c_insight}</div>',unsafe_allow_html=True)
+
+        # === RECOMMENDATIONS (concise) ===
         # Build recommendations from bottleneck questions and data gaps
         all_recs = []
         # Recommendation templates: (question_key, answer_index, recommendation, module, timeline, impact_func)
@@ -841,20 +941,7 @@ with tabs[1]:
                     <div><div style="font-size:0.78rem;font-weight:700;color:#0f172a;letter-spacing:0.02em">FIX NOW</div><div style="font-size:0.65rem;color:#94a3b8">Highest-impact, shortest-timeline actions</div></div>
                 </div>''',unsafe_allow_html=True)
             for i, rec in enumerate(tier1, 1):
-                st.markdown(f'''<div style="padding:0.7rem 0;{"border-bottom:1px solid #f1f5f9" if i<len(tier1) else ""}">
-                    <div style="display:flex;align-items:flex-start;gap:10px">
-                        <div style="background:#0c1222;color:white;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;flex-shrink:0;margin-top:1px">{i}</div>
-                        <div>
-                            <div style="font-size:0.88rem;font-weight:600;color:#0f172a;line-height:1.4">{rec["action"]}</div>
-                            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:0.4rem">
-                                <span style="font-size:0.65rem;font-weight:600;padding:2px 8px;border-radius:8px;background:#eff6ff;color:#1d4ed8">{rec.get("module","")}</span>
-                                <span style="font-size:0.65rem;padding:2px 8px;border-radius:8px;background:#f1f5f9;color:#64748b">⏱ {rec.get("timeline","")}</span>
-                            </div>
-                            <div style="font-size:0.78rem;color:#16a34a;margin-top:0.35rem;line-height:1.4">📈 {rec.get("impact","")}</div>
-                            <div style="font-size:0.7rem;color:#94a3b8;margin-top:0.2rem">Because you reported: <span style="font-weight:500;color:#64748b">{rec.get("because","")}</span></div>
-                        </div>
-                    </div>
-                </div>''',unsafe_allow_html=True)
+                st.markdown(f'''<div style="padding:0.5rem 0;{"border-bottom:1px solid #f1f5f9" if i<len(tier1) else ""}"><div style="display:flex;align-items:flex-start;gap:8px"><div style="background:#0c1222;color:white;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.65rem;font-weight:700;flex-shrink:0;margin-top:2px">{i}</div><div><div style="font-size:0.82rem;font-weight:600;color:#0f172a;line-height:1.35">{rec["action"]}</div><div style="display:flex;gap:4px;margin-top:0.25rem"><span style="font-size:0.62rem;font-weight:600;padding:1px 7px;border-radius:8px;background:#eff6ff;color:#1d4ed8">{rec.get("module","")}</span><span style="font-size:0.62rem;padding:1px 7px;border-radius:8px;background:#f1f5f9;color:#64748b">⏱ {rec.get("timeline","")}</span></div></div></div></div>''',unsafe_allow_html=True)
             st.markdown("</div>",unsafe_allow_html=True)
 
         with r2col:
@@ -864,20 +951,7 @@ with tabs[1]:
                     <div><div style="font-size:0.78rem;font-weight:700;color:#0f172a;letter-spacing:0.02em">PLAN NEXT</div><div style="font-size:0.65rem;color:#94a3b8">Important improvements to build on Tier 1 fixes</div></div>
                 </div>''',unsafe_allow_html=True)
             for i, rec in enumerate(tier2, 1):
-                st.markdown(f'''<div style="padding:0.7rem 0;{"border-bottom:1px solid #f1f5f9" if i<len(tier2) else ""}">
-                    <div style="display:flex;align-items:flex-start;gap:10px">
-                        <div style="background:#e2e8f0;color:#475569;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;flex-shrink:0;margin-top:1px">{i}</div>
-                        <div>
-                            <div style="font-size:0.88rem;font-weight:600;color:#0f172a;line-height:1.4">{rec["action"]}</div>
-                            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:0.4rem">
-                                <span style="font-size:0.65rem;font-weight:600;padding:2px 8px;border-radius:8px;background:#eff6ff;color:#1d4ed8">{rec.get("module","")}</span>
-                                <span style="font-size:0.65rem;padding:2px 8px;border-radius:8px;background:#f1f5f9;color:#64748b">⏱ {rec.get("timeline","")}</span>
-                            </div>
-                            <div style="font-size:0.78rem;color:#16a34a;margin-top:0.35rem;line-height:1.4">📈 {rec.get("impact","")}</div>
-                            <div style="font-size:0.7rem;color:#94a3b8;margin-top:0.2rem">Because you reported: <span style="font-weight:500;color:#64748b">{rec.get("because","")}</span></div>
-                        </div>
-                    </div>
-                </div>''',unsafe_allow_html=True)
+                st.markdown(f'''<div style="padding:0.5rem 0;{"border-bottom:1px solid #f1f5f9" if i<len(tier2) else ""}"><div style="display:flex;align-items:flex-start;gap:8px"><div style="background:#e2e8f0;color:#475569;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.65rem;font-weight:700;flex-shrink:0;margin-top:2px">{i}</div><div><div style="font-size:0.82rem;font-weight:600;color:#0f172a;line-height:1.35">{rec["action"]}</div><div style="display:flex;gap:4px;margin-top:0.25rem"><span style="font-size:0.62rem;font-weight:600;padding:1px 7px;border-radius:8px;background:#eff6ff;color:#1d4ed8">{rec.get("module","")}</span><span style="font-size:0.62rem;padding:1px 7px;border-radius:8px;background:#f1f5f9;color:#64748b">⏱ {rec.get("timeline","")}</span></div></div></div></div>''',unsafe_allow_html=True)
             st.markdown("</div>",unsafe_allow_html=True)
 
 with tabs[3]:
@@ -974,7 +1048,12 @@ with tabs[2]:
     if not st.session_state.done: st.info("Upload data and Run Full Analysis.")
     else:
         render_health_banner(show_modules=["Demand Forecasting"])
-        dm=st.session_state.dm; ob=INDUSTRIES[industry]["otif_benchmark"]
+        # Year filter
+        fc_years = get_demand_years(st.session_state.fc_df)
+        sel_yr = st.radio("Period", fc_years, horizontal=True, key="fc_yr")
+        fc_filtered = filter_demand_by_year(st.session_state.fc_df, sel_yr)
+        dm = calc_demand(fc_filtered) if sel_yr != "All" else st.session_state.dm
+        ob=INDUSTRIES[industry]["otif_benchmark"]
         c1,c2,c3,c4=st.columns(4)
         with c1: st.markdown(mcard("Forecast Accuracy",f'{dm["accuracy"]}%',"Target: 85-90%","good" if dm["accuracy"]>=85 else "bad","Formula: 100 - MAPE. Higher = closer to actual demand.","Target: Normality SoW (65%→90%+); Expert Interview confirmed no tracking","metric-card metric-card-blue"),unsafe_allow_html=True)
         with c2: st.markdown(mcard("Variance (Bias)",f'{abs(dm["bias"]):.1f}%',"Over-forecast" if dm["bias"]>5 else "Under-forecast" if dm["bias"]<-5 else "Stable","bad" if abs(dm["bias"])>5 else "good","(Actual - Forecast) / Actual. Positive = excess inventory risk.","Target: ±5%. Source: OTexts Forecasting Principles & Practice","metric-card"),unsafe_allow_html=True)
@@ -1069,7 +1148,12 @@ with tabs[4]:
     if not st.session_state.done: st.info("Upload data and Run Full Analysis.")
     else:
         render_health_banner(show_modules=["Billing & Revenue Mgmt","Post-Sales & Financial Closure"])
-        bl=st.session_state.bl; lpct=round((bl["leak_total"]/max(bl["rev"],1))*100,1)
+        # Year filter
+        o2c_years = get_available_years(st.session_state.o2c_df)
+        sel_yr_cfo = st.radio("Period", o2c_years, horizontal=True, key="cfo_yr")
+        o2c_filtered = filter_by_year(st.session_state.o2c_df, sel_yr_cfo)
+        bl = calc_billing(o2c_filtered, industry) if sel_yr_cfo != "All" else st.session_state.bl
+        lpct=round((bl["leak_total"]/max(bl["rev"],1))*100,1)
         c1,c2,c3,c4=st.columns(4)
         with c1: st.markdown(mcard("DSO",f'{bl["dso"]}d',f'{bl["gap"]:+.0f}d vs {bl["bench"]}d',"good" if bl["gap"]<=0 else "bad","Avg DSO_Days. Days from invoice to payment.",f"Bench: {bl['bench']}d for {industry}. Source: APQC; McKinsey O2C Optimization","metric-card metric-card-blue"),unsafe_allow_html=True)
         with c2: st.markdown(mcard("Invoice Errors",f'{bl["err"]}%',"Target: <2%","good" if bl["err"]<2 else "bad","% invoices flagged with errors.","Target: APQC. Expert Interview: portal submission failures cause delays","metric-card metric-card-green" if bl["err"]<2 else "metric-card metric-card-red"),unsafe_allow_html=True)
