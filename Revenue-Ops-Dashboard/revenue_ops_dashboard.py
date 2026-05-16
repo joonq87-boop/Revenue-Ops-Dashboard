@@ -403,14 +403,14 @@ def sample_o2c(region):
     return pd.DataFrame(rows)
 
 def sample_maturity(region="Singapore",industry="F&B / FMCG",currency="USD"):
-    """Generate maturity assessment CSV with defaults (Level 1 for most — shows drag in demo)."""
+    """Generate maturity assessment CSV with realistic mixed levels for demo."""
     rows=[
         {"Parameter":"region","Value":region},{"Parameter":"industry","Value":industry},{"Parameter":"currency","Value":currency},
-        {"Parameter":"df_method","Value":"0"},{"Parameter":"df_tracking","Value":"1"},{"Parameter":"df_customer_data","Value":"0"},
-        {"Parameter":"om_channel","Value":"0"},{"Parameter":"om_validation","Value":"0"},{"Parameter":"om_amendments","Value":"0"},
-        {"Parameter":"fl_otif","Value":"1"},{"Parameter":"fl_wms","Value":"0"},{"Parameter":"fl_visibility","Value":"1"},
-        {"Parameter":"br_invoicing","Value":"0"},{"Parameter":"br_discount","Value":"0"},{"Parameter":"br_portal","Value":"1"},
-        {"Parameter":"ps_collections","Value":"0"},{"Parameter":"ps_aging","Value":"1"},{"Parameter":"ps_cash_app","Value":"0"},
+        {"Parameter":"df_method","Value":"1"},{"Parameter":"df_tracking","Value":"1"},{"Parameter":"df_customer_data","Value":"2"},
+        {"Parameter":"om_channel","Value":"1"},{"Parameter":"om_validation","Value":"0"},{"Parameter":"om_amendments","Value":"1"},
+        {"Parameter":"fl_otif","Value":"2"},{"Parameter":"fl_wms","Value":"1"},{"Parameter":"fl_visibility","Value":"1"},
+        {"Parameter":"br_invoicing","Value":"0"},{"Parameter":"br_discount","Value":"1"},{"Parameter":"br_portal","Value":"2"},
+        {"Parameter":"ps_collections","Value":"1"},{"Parameter":"ps_aging","Value":"2"},{"Parameter":"ps_cash_app","Value":"0"},
     ]
     return pd.DataFrame(rows)
 
@@ -616,20 +616,17 @@ def render_health_banner(show_modules):
         </div>
     </div>''',unsafe_allow_html=True)
 
-    # Bottleneck rows — compact, one line each
-    for b in bottlenecks:
-        lv_color = "#dc2626" if b["level"] == 1 else "#f59e0b"
-        lv_bg = "#fef2f2" if b["level"] == 1 else "#fffbeb"
-        lv_label = "Basic" if b["level"] == 1 else "Developing"
-        st.markdown(f'''<div style="display:flex;align-items:flex-start;gap:10px;padding:6px 14px 6px 20px;border-left:3px solid {lv_color};margin-bottom:4px;margin-left:4px">
-            <div style="flex-shrink:0;margin-top:1px"><span style="font-size:0.6rem;font-weight:700;padding:2px 6px;border-radius:6px;background:{lv_bg};color:{lv_color}">L{b["level"]}</span></div>
-            <div style="min-width:0">
-                <span style="font-size:0.75rem;font-weight:600;color:#0f172a">{b["ans"]}</span>
-                <span style="font-size:0.7rem;color:#94a3b8;margin-left:6px">· {MODULE_ICONS.get(b["mod"],"")} {b["mod"]}</span>
-                <div style="font-size:0.72rem;color:#64748b;line-height:1.4;margin-top:1px">{b["insight"]}</div>
-            </div>
-        </div>''',unsafe_allow_html=True)
-    st.markdown('<div style="height:8px"></div>',unsafe_allow_html=True)
+    # Bottleneck rows — collapsible
+    if len(bottlenecks) > 0:
+        with st.expander(f"📋 {len(bottlenecks)} maturity bottleneck{'s' if len(bottlenecks)!=1 else ''} — click to see details", expanded=False):
+            for b in bottlenecks:
+                lv_color = "#dc2626" if b["level"] == 1 else "#f59e0b"
+                lv_bg = "#fef2f2" if b["level"] == 1 else "#fffbeb"
+                st.markdown(f'''<div style="display:flex;align-items:flex-start;gap:10px;padding:5px 0;border-bottom:1px solid #f1f5f9">
+                    <span style="font-size:0.6rem;font-weight:700;padding:2px 6px;border-radius:6px;background:{lv_bg};color:{lv_color}">L{b["level"]}</span>
+                    <div><span style="font-size:0.75rem;font-weight:600;color:#0f172a">{b["ans"]}</span> <span style="font-size:0.68rem;color:#94a3b8">· {b["mod"]}</span><div style="font-size:0.7rem;color:#64748b;margin-top:1px">{b["insight"]}</div></div>
+                </div>''',unsafe_allow_html=True)
+    st.markdown('<div style="height:4px"></div>',unsafe_allow_html=True)
 
 DEFS={"fc_df":None,"o2c_df":None,"maturity_df":None,"fc_hash":None,"o2c_hash":None,"mat_hash":None,"dm":None,"om":None,"fl":None,"bl":None,"ps":None,"mod_scores":None,"ai_exec":None,"ai_agents":None,"done":False,"news":None,"wb":None,"gt":None,"market_ai":None,"market_fetched":False,"region":"Singapore","industry":"F&B / FMCG","diag_responses":{},"inv_days":45,"dpo_days":30,"display_ccy":"USD","ltv":None,"cash_app":None,"disputes":None,"order_ingest":None,"invoice_demo":None,"yearly_metrics":None}
 for k,v in DEFS.items():
@@ -699,9 +696,9 @@ with tabs[0]:
                 st.session_state.region=r; st.session_state.industry=ind; st.session_state.display_ccy=cur; st.session_state.diag_responses=diag
             st.success(f"✓ Config: {st.session_state.region}, {st.session_state.industry}")
     st.markdown("</div>",unsafe_allow_html=True)
-    b1,b2,b3=st.columns([1,1,1])
+    b1,b2,b3,b4=st.columns([1,1,1,1])
     with b1:
-        if st.button("Load Demo Data",use_container_width=True):
+        if st.button("📥 Load Demo Data",use_container_width=True):
             st.session_state.fc_df=sample_demand(); st.session_state.o2c_df=sample_o2c("Singapore"); st.session_state.maturity_df=sample_maturity()
             r,ind,cur,diag=parse_maturity_csv(st.session_state.maturity_df)
             st.session_state.region=r; st.session_state.industry=ind; st.session_state.display_ccy=cur; st.session_state.diag_responses=diag
@@ -709,8 +706,10 @@ with tabs[0]:
             if "DPO_Days" in st.session_state.o2c_df.columns: st.session_state.dpo_days=int(st.session_state.o2c_df["DPO_Days"].iloc[0])
             st.session_state.fc_hash="s"; st.session_state.o2c_hash="s"; st.session_state.mat_hash="s"; st.session_state.done=False; st.rerun()
     with b2:
-        if st.session_state.fc_df is not None and st.session_state.o2c_df is not None:
-            if st.button("Run Full Analysis",use_container_width=True):
+        if st.button("🚀 Run Full Analysis",use_container_width=True):
+            if st.session_state.fc_df is None or st.session_state.o2c_df is None:
+                st.error("Please load data first (upload CSVs or click Load Demo Data)")
+            else:
                 region=st.session_state.region; industry=st.session_state.industry; ccy=st.session_state.display_ccy
                 inv_d=st.session_state.inv_days; dpo_d=st.session_state.dpo_days
                 ds=get_diag_scores(st.session_state.diag_responses)
@@ -731,7 +730,33 @@ with tabs[0]:
                     except Exception as e: st.warning(f"Agent error: {e}")
                 st.session_state.done=True; st.rerun()
     with b3:
-        if st.button("Reset",use_container_width=True): reset(); st.rerun()
+        if st.button("⚡ Load & Analyze",use_container_width=True):
+            st.session_state.fc_df=sample_demand(); st.session_state.o2c_df=sample_o2c("Singapore"); st.session_state.maturity_df=sample_maturity()
+            r,ind,cur,diag=parse_maturity_csv(st.session_state.maturity_df)
+            st.session_state.region=r; st.session_state.industry=ind; st.session_state.display_ccy=cur; st.session_state.diag_responses=diag
+            if "Inventory_Days" in st.session_state.o2c_df.columns: st.session_state.inv_days=int(st.session_state.o2c_df["Inventory_Days"].iloc[0])
+            if "DPO_Days" in st.session_state.o2c_df.columns: st.session_state.dpo_days=int(st.session_state.o2c_df["DPO_Days"].iloc[0])
+            region=st.session_state.region; industry=st.session_state.industry; ccy=st.session_state.display_ccy
+            inv_d=st.session_state.inv_days; dpo_d=st.session_state.dpo_days; ds=get_diag_scores(diag)
+            with st.spinner("Loading & computing..."): st.session_state.dm=calc_demand(st.session_state.fc_df); st.session_state.om=calc_order_mgmt(st.session_state.o2c_df); st.session_state.fl=calc_fulfilment(st.session_state.o2c_df,industry); st.session_state.bl=calc_billing(st.session_state.o2c_df,industry); st.session_state.ps=calc_post_sales(st.session_state.o2c_df,industry,inv_d,dpo_d); st.session_state.mod_scores=calc_module_scores(st.session_state.dm,st.session_state.om,st.session_state.fl,st.session_state.bl,st.session_state.ps,ds)
+            with st.spinner("LTV & Cash App..."): st.session_state.ltv=calc_customer_ltv(st.session_state.o2c_df,industry); st.session_state.cash_app=calc_cash_app_simulation(st.session_state.o2c_df); st.session_state.disputes=calc_dispute_workflow(st.session_state.o2c_df); st.session_state.order_ingest=generate_order_ingest_demo(region); st.session_state.invoice_demo=generate_invoice_demo(st.session_state.o2c_df,region)
+            yearly={}
+            for yr in get_demand_years(st.session_state.fc_df)[1:]:
+                fd=filter_demand_by_year(st.session_state.fc_df,yr); od=filter_by_year(st.session_state.o2c_df,yr)
+                if len(fd)>0 and len(od)>0:
+                    yd=calc_demand(fd); yo=calc_order_mgmt(od); yf=calc_fulfilment(od,industry); yb=calc_billing(od,industry); yp=calc_post_sales(od,industry,inv_d,dpo_d)
+                    yearly[yr]={"accuracy":yd["accuracy"],"mape":yd["mape"],"bias":yd["bias"],"otif":yd["otif"],"dso":yb["dso"],"err":yo["err"],"disp":yo["disp"],"leakage_pct":round((yb["leak_total"]/max(yb["rev"],1))*100,1),"ccc":yp["ccc"],"score":yp["score"],"rev":yb["rev"]}
+            st.session_state.yearly_metrics=yearly
+            st.session_state.fc_hash="s"; st.session_state.o2c_hash="s"; st.session_state.mat_hash="s"
+            with st.spinner("AI insights..."):
+                try: st.session_state.ai_exec=get_executive_ai(st.session_state.dm,st.session_state.om,st.session_state.fl,st.session_state.bl,st.session_state.ps,st.session_state.mod_scores,ds,region,industry,ccy)
+                except: pass
+            with st.spinner("Agent simulation..."):
+                try: st.session_state.ai_agents=get_agent_simulation(st.session_state.dm,st.session_state.om,st.session_state.fl,st.session_state.bl,st.session_state.ps,st.session_state.mod_scores,region,industry,ccy)
+                except: pass
+            st.session_state.done=True; st.rerun()
+    with b4:
+        if st.button("🔄 Reset",use_container_width=True): reset(); st.rerun()
     if st.session_state.fc_df is not None:
         st.markdown(f'<div class="info-box">Data: Demand {len(st.session_state.fc_df)} rows · O2C {len(st.session_state.o2c_df) if st.session_state.o2c_df is not None else 0} rows · {st.session_state.region}, {st.session_state.industry}, {st.session_state.display_ccy} · Inv: {st.session_state.inv_days}d · DPO: {st.session_state.dpo_days}d</div>',unsafe_allow_html=True)
     if st.session_state.done: st.success("Analysis complete — explore tabs above.")
@@ -762,42 +787,51 @@ with tabs[1]:
         else:
             diagnosis = "Your data and processes are well-aligned. Focus on the refinement recommendations below to move from good to best-in-class."
 
-        # === OVERALL HEALTH SCORE ===
-        st.markdown(f'''<div style="background:linear-gradient(135deg,#0c1222 0%,#162040 50%,#1a2a52 100%);border-radius:16px;padding:2rem 2.5rem;margin-bottom:1.25rem;box-shadow:0 4px 24px rgba(10,22,40,0.15)">
-            <div style="display:flex;align-items:center;gap:2.5rem">
-                <div style="flex-shrink:0;text-align:center">
-                    <div style="font-size:0.65rem;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:rgba(148,163,184,0.8);margin-bottom:0.4rem">OVERALL O2C HEALTH</div>
-                    <div style="position:relative;width:120px;height:120px;margin:0 auto">
-                        <svg viewBox="0 0 120 120" style="transform:rotate(-90deg)">
-                            <circle cx="60" cy="60" r="52" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="10"/>
-                            <circle cx="60" cy="60" r="52" fill="none" stroke="{overall_color}" stroke-width="10" stroke-dasharray="{overall * 3.27} 327" stroke-linecap="round"/>
-                        </svg>
-                        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center">
-                            <div style="font-family:JetBrains Mono;font-size:2rem;font-weight:700;color:white;line-height:1">{overall}</div>
-                            <div style="font-size:0.7rem;font-weight:600;color:{overall_color}">{overall_label}</div>
-                        </div>
+        # === DUAL HEALTH SCORES: DEMAND + O2C ===
+        df_score = ms.get("Demand Forecasting", 50)
+        o2c_mods = ["Order Management","Order Fulfilment & Logistics","Billing & Revenue Mgmt","Post-Sales & Financial Closure"]
+        o2c_score = round(sum(ms.get(m,50) for m in o2c_mods) / len(o2c_mods))
+        df_label = "Good" if df_score >= 70 else "At Risk" if df_score >= 45 else "Critical"
+        o2c_label = "Good" if o2c_score >= 70 else "At Risk" if o2c_score >= 45 else "Critical"
+        df_color = scolor(df_score); o2c_color = scolor(o2c_score)
+
+        st.markdown(f'''<div style="background:linear-gradient(135deg,#0c1222 0%,#162040 50%,#1a2a52 100%);border-radius:16px;padding:1.75rem 2rem;margin-bottom:1.25rem;box-shadow:0 4px 24px rgba(10,22,40,0.15)">
+            <div style="font-size:1rem;font-weight:600;color:white;margin-bottom:0.5rem">Executive Health Report</div>
+            <div style="font-size:0.82rem;color:rgba(203,213,225,0.9);line-height:1.55;margin-bottom:1.25rem">{diagnosis}</div>
+            <div style="display:flex;align-items:center;gap:2rem;flex-wrap:wrap">
+                <div style="text-align:center">
+                    <div style="font-size:0.6rem;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:rgba(148,163,184,0.7);margin-bottom:0.3rem">📦 DEMAND FORECASTING</div>
+                    <div style="position:relative;width:100px;height:100px;margin:0 auto">
+                        <svg viewBox="0 0 100 100" style="transform:rotate(-90deg)"><circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="8"/><circle cx="50" cy="50" r="42" fill="none" stroke="{df_color}" stroke-width="8" stroke-dasharray="{df_score*2.64} 264" stroke-linecap="round"/></svg>
+                        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center"><div style="font-family:JetBrains Mono;font-size:1.6rem;font-weight:700;color:white">{df_score}</div><div style="font-size:0.62rem;font-weight:600;color:{df_color}">{df_label}</div></div>
                     </div>
                 </div>
-                <div style="flex:1">
-                    <div style="font-size:1.1rem;font-weight:600;color:white;margin-bottom:0.5rem">Executive Health Report</div>
-                    <div style="font-size:0.88rem;color:rgba(203,213,225,0.9);line-height:1.65">{diagnosis}</div>
-                    <div style="display:flex;gap:16px;margin-top:1rem">
-                        <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:8px 14px;text-align:center">
-                            <div style="font-size:0.6rem;color:rgba(148,163,184,0.7);text-transform:uppercase;letter-spacing:0.1em">Process Drag</div>
-                            <div style="font-family:JetBrains Mono;font-size:1.1rem;font-weight:700;color:{"#f87171" if total_drag>20 else "#fbbf24" if total_drag>5 else "#4ade80"}">{total_drag} pts</div>
-                        </div>
-                        <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:8px 14px;text-align:center">
-                            <div style="font-size:0.6rem;color:rgba(148,163,184,0.7);text-transform:uppercase;letter-spacing:0.1em">Biggest Gap</div>
-                            <div style="font-size:0.82rem;font-weight:600;color:white;margin-top:2px">{worst_module.split(" ")[0] if worst_module else "—"}</div>
-                        </div>
-                        <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:8px 14px;text-align:center">
-                            <div style="font-size:0.6rem;color:rgba(148,163,184,0.7);text-transform:uppercase;letter-spacing:0.1em">Revenue at Risk</div>
-                            <div style="font-family:JetBrains Mono;font-size:1.1rem;font-weight:700;color:#fbbf24">{fmtc(st.session_state.bl["leak_total"],ccy,True)}</div>
-                        </div>
-                        <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:8px 14px;text-align:center">
-                            <div style="font-size:0.6rem;color:rgba(148,163,184,0.7);text-transform:uppercase;letter-spacing:0.1em">DSO Gap</div>
-                            <div style="font-family:JetBrains Mono;font-size:1.1rem;font-weight:700;color:{"#f87171" if st.session_state.bl["gap"]>5 else "#4ade80"}">{st.session_state.bl["gap"]:+.0f}d</div>
-                        </div>
+                <div style="text-align:center">
+                    <div style="font-size:0.6rem;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:rgba(148,163,184,0.7);margin-bottom:0.3rem">💰 ORDER-TO-CASH</div>
+                    <div style="position:relative;width:100px;height:100px;margin:0 auto">
+                        <svg viewBox="0 0 100 100" style="transform:rotate(-90deg)"><circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="8"/><circle cx="50" cy="50" r="42" fill="none" stroke="{o2c_color}" stroke-width="8" stroke-dasharray="{o2c_score*2.64} 264" stroke-linecap="round"/></svg>
+                        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center"><div style="font-family:JetBrains Mono;font-size:1.6rem;font-weight:700;color:white">{o2c_score}</div><div style="font-size:0.62rem;font-weight:600;color:{o2c_color}">{o2c_label}</div></div>
+                    </div>
+                </div>
+                <div style="text-align:center">
+                    <div style="font-size:0.6rem;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:rgba(148,163,184,0.7);margin-bottom:0.3rem">⚡ OVERALL</div>
+                    <div style="position:relative;width:100px;height:100px;margin:0 auto">
+                        <svg viewBox="0 0 100 100" style="transform:rotate(-90deg)"><circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="8"/><circle cx="50" cy="50" r="42" fill="none" stroke="{overall_color}" stroke-width="8" stroke-dasharray="{overall*2.64} 264" stroke-linecap="round"/></svg>
+                        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center"><div style="font-family:JetBrains Mono;font-size:1.6rem;font-weight:700;color:white">{overall}</div><div style="font-size:0.62rem;font-weight:600;color:{overall_color}">{overall_label}</div></div>
+                    </div>
+                </div>
+                <div style="flex:1;display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end">
+                    <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:8px 14px;text-align:center">
+                        <div style="font-size:0.58rem;color:rgba(148,163,184,0.7);text-transform:uppercase;letter-spacing:0.08em">Process Drag</div>
+                        <div style="font-family:JetBrains Mono;font-size:1rem;font-weight:700;color:{"#f87171" if total_drag>20 else "#fbbf24" if total_drag>5 else "#4ade80"}">{total_drag} pts</div>
+                    </div>
+                    <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:8px 14px;text-align:center">
+                        <div style="font-size:0.58rem;color:rgba(148,163,184,0.7);text-transform:uppercase;letter-spacing:0.08em">Revenue at Risk</div>
+                        <div style="font-family:JetBrains Mono;font-size:1rem;font-weight:700;color:#fbbf24">{fmtc(st.session_state.bl["leak_total"],ccy,True)}</div>
+                    </div>
+                    <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:8px 14px;text-align:center">
+                        <div style="font-size:0.58rem;color:rgba(148,163,184,0.7);text-transform:uppercase;letter-spacing:0.08em">DSO Gap</div>
+                        <div style="font-family:JetBrains Mono;font-size:1rem;font-weight:700;color:{"#f87171" if st.session_state.bl["gap"]>5 else "#4ade80"}">{st.session_state.bl["gap"]:+.0f}d</div>
                     </div>
                 </div>
             </div>
@@ -827,22 +861,28 @@ with tabs[1]:
         st.markdown('<div style="display:flex;gap:16px;margin-top:0.75rem;font-size:0.68rem;color:#94a3b8"><span>█ Blended score (what you achieve today)</span><span style="color:#0369a1">░ Data potential (if processes were optimised)</span><span style="color:#dc2626">▒ Process drag (your setup answers)</span></div>',unsafe_allow_html=True)
         st.markdown("</div>",unsafe_allow_html=True)
 
-        # === 3-YEAR TREND CHART ===
+        # === 3-YEAR TREND ===
         ym = st.session_state.yearly_metrics
         if ym and len(ym) > 1:
-            st.markdown('<div class="section-card"><div class="section-title">3-Year Performance Trend</div>',unsafe_allow_html=True)
-            trend_df = pd.DataFrame([{"Year":yr,"Forecast Accuracy":v["accuracy"],"DSO":v["dso"],"OTIF":v["otif"],"Error Rate":v["err"],"CCC":v["ccc"]} for yr,v in sorted(ym.items())])
-            tc1,tc2=st.columns(2)
-            with tc1:
-                st.markdown('<div style="font-size:0.75rem;font-weight:600;color:#64748b;margin-bottom:0.3rem">Accuracy & OTIF (higher = better)</div>',unsafe_allow_html=True)
-                st.line_chart(trend_df.set_index("Year")[["Forecast Accuracy","OTIF"]],height=180)
-            with tc2:
-                st.markdown('<div style="font-size:0.75rem;font-weight:600;color:#64748b;margin-bottom:0.3rem">DSO & CCC (lower = better)</div>',unsafe_allow_html=True)
-                st.line_chart(trend_df.set_index("Year")[["DSO","CCC"]],height=180)
-            # Trend summary
             yrs = sorted(ym.keys()); first=ym[yrs[0]]; last=ym[yrs[-1]]
-            acc_delta = last["accuracy"] - first["accuracy"]; dso_delta = last["dso"] - first["dso"]
-            st.markdown(f'<div style="display:flex;gap:16px;font-size:0.78rem;margin-top:0.5rem"><span style="color:{"#16a34a" if acc_delta>0 else "#dc2626"}">Accuracy: {acc_delta:+.1f}% ({yrs[0]}→{yrs[-1]})</span><span style="color:{"#16a34a" if dso_delta<0 else "#dc2626"}">DSO: {dso_delta:+.1f}d</span><span style="color:#64748b">OTIF: {last["otif"]-first["otif"]:+.1f}%</span><span style="color:#64748b">Error rate: {last["err"]-first["err"]:+.1f}%</span></div>',unsafe_allow_html=True)
+            acc_d=last["accuracy"]-first["accuracy"]; dso_d=last["dso"]-first["dso"]; otif_d=last["otif"]-first["otif"]; err_d=last["err"]-first["err"]
+            # Trend metric cards
+            st.markdown('<div class="section-card"><div class="section-title">3-Year Performance Trend</div>',unsafe_allow_html=True)
+            tr1,tr2,tr3,tr4=st.columns(4)
+            with tr1: st.markdown(f'<div style="text-align:center"><div style="font-size:0.65rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.08em">Forecast Accuracy</div><div style="font-family:JetBrains Mono;font-size:1.3rem;font-weight:700;color:{"#16a34a" if acc_d>0 else "#dc2626"}">{acc_d:+.1f}%</div><div style="font-size:0.72rem;color:#94a3b8">{first["accuracy"]:.0f}% → {last["accuracy"]:.0f}%</div></div>',unsafe_allow_html=True)
+            with tr2: st.markdown(f'<div style="text-align:center"><div style="font-size:0.65rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.08em">DSO</div><div style="font-family:JetBrains Mono;font-size:1.3rem;font-weight:700;color:{"#16a34a" if dso_d<0 else "#dc2626"}">{dso_d:+.1f}d</div><div style="font-size:0.72rem;color:#94a3b8">{first["dso"]:.0f}d → {last["dso"]:.0f}d</div></div>',unsafe_allow_html=True)
+            with tr3: st.markdown(f'<div style="text-align:center"><div style="font-size:0.65rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.08em">OTIF</div><div style="font-family:JetBrains Mono;font-size:1.3rem;font-weight:700;color:{"#16a34a" if otif_d>0 else "#dc2626"}">{otif_d:+.1f}%</div><div style="font-size:0.72rem;color:#94a3b8">{first["otif"]:.0f}% → {last["otif"]:.0f}%</div></div>',unsafe_allow_html=True)
+            with tr4: st.markdown(f'<div style="text-align:center"><div style="font-size:0.65rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.08em">Error Rate</div><div style="font-family:JetBrains Mono;font-size:1.3rem;font-weight:700;color:{"#16a34a" if err_d<0 else "#dc2626"}">{err_d:+.1f}%</div><div style="font-size:0.72rem;color:#94a3b8">{first["err"]:.0f}% → {last["err"]:.0f}%</div></div>',unsafe_allow_html=True)
+            # Natural language trend analysis
+            trend_parts = []
+            if acc_d > 5: trend_parts.append(f"Forecast accuracy improved significantly by {acc_d:.0f} percentage points — your demand planning matured over this period")
+            elif acc_d > 0: trend_parts.append(f"Forecast accuracy improved modestly ({acc_d:+.1f}%) — progress is real but slow")
+            else: trend_parts.append(f"Forecast accuracy declined ({acc_d:+.1f}%) — this warrants investigation into demand signal quality or model drift")
+            if dso_d < -5: trend_parts.append(f"DSO dropped {abs(dso_d):.0f} days — your collections and invoicing processes got faster")
+            elif dso_d < 0: trend_parts.append(f"DSO improved slightly ({dso_d:+.0f}d)")
+            else: trend_parts.append(f"DSO increased by {dso_d:.0f} days — cash cycle is getting longer, not shorter")
+            if last["leakage_pct"] > 3: trend_parts.append(f"Revenue leakage at {last['leakage_pct']}% in the latest year is still above the 3% threshold — pricing governance remains a gap")
+            st.markdown(f'<div style="background:#f8fafc;border-radius:10px;padding:10px 14px;font-size:0.78rem;color:#334155;line-height:1.55;margin-top:0.75rem">{". ".join(trend_parts)}.</div>',unsafe_allow_html=True)
             st.markdown("</div>",unsafe_allow_html=True)
 
         # === AI INSIGHT PANELS ===
@@ -1054,6 +1094,16 @@ with tabs[2]:
         fc_filtered = filter_demand_by_year(st.session_state.fc_df, sel_yr)
         dm = calc_demand(fc_filtered) if sel_yr != "All" else st.session_state.dm
         ob=INDUSTRIES[industry]["otif_benchmark"]
+        # AI Analysis
+        yr_label = f" ({sel_yr})" if sel_yr != "All" else " (All years)"
+        fc_analysis = f'Forecast accuracy is {dm["accuracy"]:.1f}%{yr_label} with MAPE of {dm["mape"]:.1f}%.'
+        if dm["bias"] < -5: fc_analysis += f' Systematic under-forecasting (bias {dm["bias"]:+.1f}%) suggests demand is consistently higher than planned — risk of stockouts and lost sales.'
+        elif dm["bias"] > 5: fc_analysis += f' Systematic over-forecasting (bias {dm["bias"]:+.1f}%) is creating excess inventory and carrying costs.'
+        else: fc_analysis += f' Forecast bias is well-controlled at {dm["bias"]:+.1f}%.'
+        if dm["otif"] < ob: fc_analysis += f' OTIF at {dm["otif"]}% is below the {ob}% benchmark — fulfilment gaps may be compounding forecast errors.'
+        worst_sku = dm["sku"].sort_values("MAPE",ascending=False).iloc[0] if len(dm["sku"])>0 else None
+        if worst_sku is not None and worst_sku["MAPE"] > 20: fc_analysis += f' {worst_sku["SKU"]} is your worst performer at {worst_sku["MAPE"]:.0f}% MAPE — consider isolating this SKU for promotion-adjusted modelling.'
+        st.markdown(f'<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 14px;font-size:0.78rem;color:#166534;margin-bottom:0.75rem"><strong>📦 AI Analysis:</strong> {fc_analysis}</div>',unsafe_allow_html=True)
         c1,c2,c3,c4=st.columns(4)
         with c1: st.markdown(mcard("Forecast Accuracy",f'{dm["accuracy"]}%',"Target: 85-90%","good" if dm["accuracy"]>=85 else "bad","Formula: 100 - MAPE. Higher = closer to actual demand.","Target: Normality SoW (65%→90%+); Expert Interview confirmed no tracking","metric-card metric-card-blue"),unsafe_allow_html=True)
         with c2: st.markdown(mcard("Variance (Bias)",f'{abs(dm["bias"]):.1f}%',"Over-forecast" if dm["bias"]>5 else "Under-forecast" if dm["bias"]<-5 else "Stable","bad" if abs(dm["bias"])>5 else "good","(Actual - Forecast) / Actual. Positive = excess inventory risk.","Target: ±5%. Source: OTexts Forecasting Principles & Practice","metric-card"),unsafe_allow_html=True)
@@ -1154,6 +1204,16 @@ with tabs[4]:
         o2c_filtered = filter_by_year(st.session_state.o2c_df, sel_yr_cfo)
         bl = calc_billing(o2c_filtered, industry) if sel_yr_cfo != "All" else st.session_state.bl
         lpct=round((bl["leak_total"]/max(bl["rev"],1))*100,1)
+        # AI Analysis
+        yr_label = f" ({sel_yr_cfo})" if sel_yr_cfo != "All" else " (All years)"
+        cfo_analysis = f'DSO is {bl["dso"]:.0f} days{yr_label}, {"on target" if bl["gap"]<=0 else f"{bl["gap"]:.0f} days above the {bl["bench"]}d benchmark"}.'
+        cfo_analysis += f' Revenue leakage estimated at {fmtc(bl["leak_total"],ccy,True)} ({lpct}% of revenue) — '
+        if lpct > 3: cfo_analysis += 'this exceeds the 3% threshold and warrants immediate attention on pricing governance.'
+        elif lpct > 1.5: cfo_analysis += 'within typical range but recoverable through discount controls and invoice accuracy improvements.'
+        else: cfo_analysis += 'well-controlled.'
+        if bl["err"] > 5: cfo_analysis += f' Invoice error rate at {bl["err"]:.0f}% is high — each error cascades into disputes and extends DSO by 2-4 weeks.'
+        if bl["disp"] > 5: cfo_analysis += f' Dispute rate at {bl["disp"]:.0f}% suggests upstream data quality issues from order management.'
+        st.markdown(f'<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 14px;font-size:0.78rem;color:#1e40af;margin-bottom:0.75rem"><strong>💰 AI Analysis:</strong> {cfo_analysis}</div>',unsafe_allow_html=True)
         c1,c2,c3,c4=st.columns(4)
         with c1: st.markdown(mcard("DSO",f'{bl["dso"]}d',f'{bl["gap"]:+.0f}d vs {bl["bench"]}d',"good" if bl["gap"]<=0 else "bad","Avg DSO_Days. Days from invoice to payment.",f"Bench: {bl['bench']}d for {industry}. Source: APQC; McKinsey O2C Optimization","metric-card metric-card-blue"),unsafe_allow_html=True)
         with c2: st.markdown(mcard("Invoice Errors",f'{bl["err"]}%',"Target: <2%","good" if bl["err"]<2 else "bad","% invoices flagged with errors.","Target: APQC. Expert Interview: portal submission failures cause delays","metric-card metric-card-green" if bl["err"]<2 else "metric-card metric-card-red"),unsafe_allow_html=True)
