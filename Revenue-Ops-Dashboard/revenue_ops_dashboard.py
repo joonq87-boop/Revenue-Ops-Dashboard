@@ -696,7 +696,7 @@ with tabs[0]:
                 st.session_state.region=r; st.session_state.industry=ind; st.session_state.display_ccy=cur; st.session_state.diag_responses=diag
             st.success(f"✓ Config: {st.session_state.region}, {st.session_state.industry}")
     st.markdown("</div>",unsafe_allow_html=True)
-    b1,b2,b3,b4=st.columns([1,1,1,1])
+    b1,b2,b3=st.columns([1,1,1])
     with b1:
         if st.button("📥 Load Demo Data",use_container_width=True):
             st.session_state.fc_df=sample_demand(); st.session_state.o2c_df=sample_o2c("Singapore"); st.session_state.maturity_df=sample_maturity()
@@ -706,13 +706,12 @@ with tabs[0]:
             if "DPO_Days" in st.session_state.o2c_df.columns: st.session_state.dpo_days=int(st.session_state.o2c_df["DPO_Days"].iloc[0])
             st.session_state.fc_hash="s"; st.session_state.o2c_hash="s"; st.session_state.mat_hash="s"; st.session_state.done=False; st.rerun()
     with b2:
-        if st.button("🚀 Run Full Analysis",use_container_width=True):
+        if st.button("🚀 Run Analysis",use_container_width=True):
             if st.session_state.fc_df is None or st.session_state.o2c_df is None:
-                st.error("Please load data first (upload CSVs or click Load Demo Data)")
+                st.error("Load data first — click Load Demo Data or upload CSVs above.")
             else:
                 region=st.session_state.region; industry=st.session_state.industry; ccy=st.session_state.display_ccy
-                inv_d=st.session_state.inv_days; dpo_d=st.session_state.dpo_days
-                ds=get_diag_scores(st.session_state.diag_responses)
+                inv_d=st.session_state.inv_days; dpo_d=st.session_state.dpo_days; ds=get_diag_scores(st.session_state.diag_responses)
                 with st.spinner("Computing..."): st.session_state.dm=calc_demand(st.session_state.fc_df); st.session_state.om=calc_order_mgmt(st.session_state.o2c_df); st.session_state.fl=calc_fulfilment(st.session_state.o2c_df,industry); st.session_state.bl=calc_billing(st.session_state.o2c_df,industry); st.session_state.ps=calc_post_sales(st.session_state.o2c_df,industry,inv_d,dpo_d); st.session_state.mod_scores=calc_module_scores(st.session_state.dm,st.session_state.om,st.session_state.fl,st.session_state.bl,st.session_state.ps,ds)
                 with st.spinner("LTV & Cash App..."): st.session_state.ltv=calc_customer_ltv(st.session_state.o2c_df,industry); st.session_state.cash_app=calc_cash_app_simulation(st.session_state.o2c_df); st.session_state.disputes=calc_dispute_workflow(st.session_state.o2c_df); st.session_state.order_ingest=generate_order_ingest_demo(region); st.session_state.invoice_demo=generate_invoice_demo(st.session_state.o2c_df,region)
                 yearly={}
@@ -724,41 +723,15 @@ with tabs[0]:
                 st.session_state.yearly_metrics=yearly
                 with st.spinner("AI insights..."):
                     try: st.session_state.ai_exec=get_executive_ai(st.session_state.dm,st.session_state.om,st.session_state.fl,st.session_state.bl,st.session_state.ps,st.session_state.mod_scores,ds,region,industry,ccy)
-                    except Exception as e: st.warning(f"AI error: {e}")
+                    except: pass
                 with st.spinner("Agent simulation..."):
                     try: st.session_state.ai_agents=get_agent_simulation(st.session_state.dm,st.session_state.om,st.session_state.fl,st.session_state.bl,st.session_state.ps,st.session_state.mod_scores,region,industry,ccy)
-                    except Exception as e: st.warning(f"Agent error: {e}")
+                    except: pass
                 st.session_state.done=True; st.rerun()
     with b3:
-        if st.button("⚡ Load & Analyze",use_container_width=True):
-            st.session_state.fc_df=sample_demand(); st.session_state.o2c_df=sample_o2c("Singapore"); st.session_state.maturity_df=sample_maturity()
-            r,ind,cur,diag=parse_maturity_csv(st.session_state.maturity_df)
-            st.session_state.region=r; st.session_state.industry=ind; st.session_state.display_ccy=cur; st.session_state.diag_responses=diag
-            if "Inventory_Days" in st.session_state.o2c_df.columns: st.session_state.inv_days=int(st.session_state.o2c_df["Inventory_Days"].iloc[0])
-            if "DPO_Days" in st.session_state.o2c_df.columns: st.session_state.dpo_days=int(st.session_state.o2c_df["DPO_Days"].iloc[0])
-            region=st.session_state.region; industry=st.session_state.industry; ccy=st.session_state.display_ccy
-            inv_d=st.session_state.inv_days; dpo_d=st.session_state.dpo_days; ds=get_diag_scores(diag)
-            with st.spinner("Loading & computing..."): st.session_state.dm=calc_demand(st.session_state.fc_df); st.session_state.om=calc_order_mgmt(st.session_state.o2c_df); st.session_state.fl=calc_fulfilment(st.session_state.o2c_df,industry); st.session_state.bl=calc_billing(st.session_state.o2c_df,industry); st.session_state.ps=calc_post_sales(st.session_state.o2c_df,industry,inv_d,dpo_d); st.session_state.mod_scores=calc_module_scores(st.session_state.dm,st.session_state.om,st.session_state.fl,st.session_state.bl,st.session_state.ps,ds)
-            with st.spinner("LTV & Cash App..."): st.session_state.ltv=calc_customer_ltv(st.session_state.o2c_df,industry); st.session_state.cash_app=calc_cash_app_simulation(st.session_state.o2c_df); st.session_state.disputes=calc_dispute_workflow(st.session_state.o2c_df); st.session_state.order_ingest=generate_order_ingest_demo(region); st.session_state.invoice_demo=generate_invoice_demo(st.session_state.o2c_df,region)
-            yearly={}
-            for yr in get_demand_years(st.session_state.fc_df)[1:]:
-                fd=filter_demand_by_year(st.session_state.fc_df,yr); od=filter_by_year(st.session_state.o2c_df,yr)
-                if len(fd)>0 and len(od)>0:
-                    yd=calc_demand(fd); yo=calc_order_mgmt(od); yf=calc_fulfilment(od,industry); yb=calc_billing(od,industry); yp=calc_post_sales(od,industry,inv_d,dpo_d)
-                    yearly[yr]={"accuracy":yd["accuracy"],"mape":yd["mape"],"bias":yd["bias"],"otif":yd["otif"],"dso":yb["dso"],"err":yo["err"],"disp":yo["disp"],"leakage_pct":round((yb["leak_total"]/max(yb["rev"],1))*100,1),"ccc":yp["ccc"],"score":yp["score"],"rev":yb["rev"]}
-            st.session_state.yearly_metrics=yearly
-            st.session_state.fc_hash="s"; st.session_state.o2c_hash="s"; st.session_state.mat_hash="s"
-            with st.spinner("AI insights..."):
-                try: st.session_state.ai_exec=get_executive_ai(st.session_state.dm,st.session_state.om,st.session_state.fl,st.session_state.bl,st.session_state.ps,st.session_state.mod_scores,ds,region,industry,ccy)
-                except: pass
-            with st.spinner("Agent simulation..."):
-                try: st.session_state.ai_agents=get_agent_simulation(st.session_state.dm,st.session_state.om,st.session_state.fl,st.session_state.bl,st.session_state.ps,st.session_state.mod_scores,region,industry,ccy)
-                except: pass
-            st.session_state.done=True; st.rerun()
-    with b4:
         if st.button("🔄 Reset",use_container_width=True): reset(); st.rerun()
     if st.session_state.fc_df is not None:
-        st.markdown(f'<div class="info-box">Data: Demand {len(st.session_state.fc_df)} rows · O2C {len(st.session_state.o2c_df) if st.session_state.o2c_df is not None else 0} rows · {st.session_state.region}, {st.session_state.industry}, {st.session_state.display_ccy} · Inv: {st.session_state.inv_days}d · DPO: {st.session_state.dpo_days}d</div>',unsafe_allow_html=True)
+        st.markdown(f'<div class="info-box">📊 Data loaded — Demand: {len(st.session_state.fc_df)} rows · O2C: {len(st.session_state.o2c_df) if st.session_state.o2c_df is not None else 0} rows · Config: {st.session_state.region}, {st.session_state.industry}, {st.session_state.display_ccy}</div>',unsafe_allow_html=True)
     if st.session_state.done: st.success("Analysis complete — explore tabs above.")
 
 
@@ -999,6 +972,15 @@ with tabs[3]:
     else:
         render_health_banner(show_modules=["Demand Forecasting","Order Management","Order Fulfilment & Logistics","Billing & Revenue Mgmt","Post-Sales & Financial Closure"])
         ai=st.session_state.ai_exec or {}; bl=st.session_state.bl; ps=st.session_state.ps; s=ai.get("health_score",0)
+        # AI recommendation
+        om=st.session_state.om; fl=st.session_state.fl; dm_all=st.session_state.dm
+        o2c_rec = f'Across your full O2C cycle: order error rate is {om["err"]:.0f}% and dispute rate is {om["disp"]:.0f}%, driving downstream billing delays and revenue leakage of {fmtc(bl["leak_total"],ccy,True)}.'
+        worst_area = min(st.session_state.mod_scores, key=st.session_state.mod_scores.get)
+        worst_score = st.session_state.mod_scores[worst_area]
+        o2c_rec += f' Your weakest module is {worst_area} at {worst_score}/100 — prioritise improvements here for the highest cascading impact across the cycle.'
+        if fl["otif"] < INDUSTRIES[industry]["otif_benchmark"]: o2c_rec += f' Fulfilment OTIF at {fl["otif"]}% is below benchmark — this directly affects customer satisfaction and repeat orders.'
+        if ps["aging"]["90d"] > 10: o2c_rec += f' {ps["aging"]["90d"]}% of receivables past 90 days is a cash risk that needs immediate attention.'
+        st.markdown(f'<div style="background:#fefce8;border:1px solid #fde68a;border-radius:10px;padding:10px 14px;font-size:0.78rem;color:#713f12;margin-bottom:0.75rem"><strong>📋 AI Recommendation:</strong> {o2c_rec}</div>',unsafe_allow_html=True)
         if st.session_state.market_fetched and st.session_state.market_ai:
             ms_t=st.session_state.market_ai.get("market_summary","")
             if ms_t: st.markdown(f'<div class="info-box"><strong>Market Context:</strong> {ms_t}</div>',unsafe_allow_html=True)
@@ -1066,23 +1048,6 @@ with tabs[3]:
             for i,qw in enumerate(quick_wins[:5],1):
                 st.markdown(f'<div class="insight-row"><div style="background:#0a1628;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:600;color:white;flex-shrink:0">{i}</div><div><div style="font-weight:500">{qw.get("action","")}</div><div style="font-size:0.8rem;color:#64748b">⏱ {qw.get("timeline","")} · 📈 {qw.get("expected_impact","")}</div><span style="font-size:0.7rem;background:#e0f2fe;color:#0369a1;padding:2px 8px;border-radius:20px">{qw.get("module","")}</span></div></div>',unsafe_allow_html=True)
             st.markdown("</div>",unsafe_allow_html=True)
-        st.markdown("<br>",unsafe_allow_html=True)
-        st.markdown('<div class="section-card"><div class="section-title">Agentic AI Simulation — Autonomous Interventions (Past 30 Days)</div>',unsafe_allow_html=True)
-        st.markdown('<div class="info-box">Simulated actions the Revenue Optimizer AI agent would have taken autonomously based on your actual data. Each maps to a module with quantified impact.</div>',unsafe_allow_html=True)
-        interventions = (st.session_state.ai_agents or {}).get("interventions",[])
-        if not interventions:
-            interventions = [
-                {"day":1,"module":"CollectIQ","severity":"High","trigger":f"Invoice #{random.choice(['ORD-1042','ORD-1058','ORD-1067'])} past 60 days","action":"Auto-escalated collection priority and sent AI-drafted dunning email","impact":f"Expected to recover {fmtc(random.uniform(15000,45000),ccy)} within 7 days"},
-                {"day":3,"module":"BillingEngine","severity":"Medium","trigger":"ePOD confirmed for 4 shipments with no invoice generated","action":"Auto-triggered invoice generation and submitted to customer portal","impact":"Eliminated 48-hour billing delay; DSO reduction on these orders"},
-                {"day":7,"module":"ForecastEngine","severity":"Medium","trigger":f"SKU-FMCG-002 actual demand deviated {abs(st.session_state.dm['bias']):.0f}% from forecast","action":"Retrained ensemble model with latest 4-week actuals; adjusted safety stock","impact":"Forecast bias correction; inventory alignment improved"},
-                {"day":12,"module":"OrderValidate","severity":"Low","trigger":"3 orders submitted with pricing below approved tier minimum","action":"Flagged for PriceGuard review; held orders pending commercial approval","impact":f"Prevented estimated {fmtc(random.uniform(2000,8000),ccy)} revenue leakage"},
-                {"day":18,"module":"CollectIQ","severity":"High","trigger":"Customer dispute opened on pricing mismatch","action":"Auto-assembled evidence from PriceGuard + ChangeControl; recommended credit note","impact":"Dispute resolution compressed from 14 days to 2 days"},
-                {"day":25,"module":"CreditShield","severity":"Medium","trigger":"Customer DSO trending 40% above benchmark over last 3 months","action":"Reduced credit limit by 20%; flagged account manager for review","impact":"Bad debt exposure reduced; proactive risk management"},
-            ]
-        for item in interventions:
-            sv=item.get("severity","Medium").lower(); sc2="risk-high" if sv=="high" else "risk-med" if sv=="medium" else "risk-low"
-            st.markdown(f'<div class="agent-card {sv}"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.3rem"><span style="font-size:0.75rem;font-weight:600;color:#0a1628">Day {item.get("day","?")} · {item.get("module","")}</span><span class="risk-badge {sc2}">{item.get("severity","")}</span></div><div style="font-weight:500;font-size:0.9rem;margin-bottom:0.25rem">{item.get("action","")}</div><div style="font-size:0.82rem;color:#64748b">Trigger: {item.get("trigger","")}</div><div style="font-size:0.82rem;color:#16a34a;margin-top:0.2rem">{item.get("impact","")}</div></div>',unsafe_allow_html=True)
-        st.markdown("</div>",unsafe_allow_html=True)
 
 with tabs[2]:
     if not st.session_state.done: st.info("Upload data and Run Full Analysis.")
@@ -1094,16 +1059,16 @@ with tabs[2]:
         fc_filtered = filter_demand_by_year(st.session_state.fc_df, sel_yr)
         dm = calc_demand(fc_filtered) if sel_yr != "All" else st.session_state.dm
         ob=INDUSTRIES[industry]["otif_benchmark"]
-        # AI Analysis
+        # AI Recommendation
         yr_label = f" ({sel_yr})" if sel_yr != "All" else " (All years)"
-        fc_analysis = f'Forecast accuracy is {dm["accuracy"]:.1f}%{yr_label} with MAPE of {dm["mape"]:.1f}%.'
-        if dm["bias"] < -5: fc_analysis += f' Systematic under-forecasting (bias {dm["bias"]:+.1f}%) suggests demand is consistently higher than planned — risk of stockouts and lost sales.'
-        elif dm["bias"] > 5: fc_analysis += f' Systematic over-forecasting (bias {dm["bias"]:+.1f}%) is creating excess inventory and carrying costs.'
-        else: fc_analysis += f' Forecast bias is well-controlled at {dm["bias"]:+.1f}%.'
-        if dm["otif"] < ob: fc_analysis += f' OTIF at {dm["otif"]}% is below the {ob}% benchmark — fulfilment gaps may be compounding forecast errors.'
+        fc_rec = f'Forecast accuracy is {dm["accuracy"]:.1f}%{yr_label} with MAPE of {dm["mape"]:.1f}%.'
+        if dm["bias"] < -5: fc_rec += f' You are systematically under-forecasting (bias {dm["bias"]:+.1f}%) — demand is consistently higher than planned, creating stockout risk. Consider adding promotional uplift signals and increasing safety stock on high-variance SKUs.'
+        elif dm["bias"] > 5: fc_rec += f' You are systematically over-forecasting (bias {dm["bias"]:+.1f}%) — excess inventory is tying up working capital. Tighten your demand signal inputs and review whether historical trends are being over-weighted.'
+        else: fc_rec += f' Forecast bias is well-controlled at {dm["bias"]:+.1f}% — focus on reducing MAPE through SKU-level model tuning.'
         worst_sku = dm["sku"].sort_values("MAPE",ascending=False).iloc[0] if len(dm["sku"])>0 else None
-        if worst_sku is not None and worst_sku["MAPE"] > 20: fc_analysis += f' {worst_sku["SKU"]} is your worst performer at {worst_sku["MAPE"]:.0f}% MAPE — consider isolating this SKU for promotion-adjusted modelling.'
-        st.markdown(f'<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 14px;font-size:0.78rem;color:#166534;margin-bottom:0.75rem"><strong>📦 AI Analysis:</strong> {fc_analysis}</div>',unsafe_allow_html=True)
+        if worst_sku is not None and worst_sku["MAPE"] > 20: fc_rec += f' {worst_sku["SKU"]} is your worst performer at {worst_sku["MAPE"]:.0f}% MAPE — isolate this SKU for promotion-adjusted or external-signal-enhanced modelling.'
+        if dm["accuracy"] < 85: fc_rec += f' To reach the 85% accuracy target, invest in ML ensemble models with context signals (weather, promotions, macro trends) rather than relying on historical averages alone.'
+        st.markdown(f'<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 14px;font-size:0.78rem;color:#166534;margin-bottom:0.75rem"><strong>📦 AI Recommendation:</strong> {fc_rec}</div>',unsafe_allow_html=True)
         c1,c2,c3,c4=st.columns(4)
         with c1: st.markdown(mcard("Forecast Accuracy",f'{dm["accuracy"]}%',"Target: 85-90%","good" if dm["accuracy"]>=85 else "bad","Formula: 100 - MAPE. Higher = closer to actual demand.","Target: Normality SoW (65%→90%+); Expert Interview confirmed no tracking","metric-card metric-card-blue"),unsafe_allow_html=True)
         with c2: st.markdown(mcard("Variance (Bias)",f'{abs(dm["bias"]):.1f}%',"Over-forecast" if dm["bias"]>5 else "Under-forecast" if dm["bias"]<-5 else "Stable","bad" if abs(dm["bias"])>5 else "good","(Actual - Forecast) / Actual. Positive = excess inventory risk.","Target: ±5%. Source: OTexts Forecasting Principles & Practice","metric-card"),unsafe_allow_html=True)
@@ -1204,16 +1169,15 @@ with tabs[4]:
         o2c_filtered = filter_by_year(st.session_state.o2c_df, sel_yr_cfo)
         bl = calc_billing(o2c_filtered, industry) if sel_yr_cfo != "All" else st.session_state.bl
         lpct=round((bl["leak_total"]/max(bl["rev"],1))*100,1)
-        # AI Analysis
+        # AI Recommendation
         yr_label = f" ({sel_yr_cfo})" if sel_yr_cfo != "All" else " (All years)"
-        cfo_analysis = f'DSO is {bl["dso"]:.0f} days{yr_label}, {"on target" if bl["gap"]<=0 else f"{bl["gap"]:.0f} days above the {bl["bench"]}d benchmark"}.'
-        cfo_analysis += f' Revenue leakage estimated at {fmtc(bl["leak_total"],ccy,True)} ({lpct}% of revenue) — '
-        if lpct > 3: cfo_analysis += 'this exceeds the 3% threshold and warrants immediate attention on pricing governance.'
-        elif lpct > 1.5: cfo_analysis += 'within typical range but recoverable through discount controls and invoice accuracy improvements.'
-        else: cfo_analysis += 'well-controlled.'
-        if bl["err"] > 5: cfo_analysis += f' Invoice error rate at {bl["err"]:.0f}% is high — each error cascades into disputes and extends DSO by 2-4 weeks.'
-        if bl["disp"] > 5: cfo_analysis += f' Dispute rate at {bl["disp"]:.0f}% suggests upstream data quality issues from order management.'
-        st.markdown(f'<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 14px;font-size:0.78rem;color:#1e40af;margin-bottom:0.75rem"><strong>💰 AI Analysis:</strong> {cfo_analysis}</div>',unsafe_allow_html=True)
+        cfo_rec = f'DSO is {bl["dso"]:.0f} days{yr_label}, {"on target — maintain current collections discipline" if bl["gap"]<=0 else f"{bl["gap"]:.0f} days above the {bl["bench"]}d benchmark — each excess day traps working capital"}.'
+        cfo_rec += f' Revenue leakage at {fmtc(bl["leak_total"],ccy,True)} ({lpct}% of revenue) — '
+        if lpct > 3: cfo_rec += 'this exceeds the 3% threshold. Deploy PriceGuard to enforce pricing discipline from quote to invoice, and automate invoice generation via BillingEngine to close the billing delay gap.'
+        elif lpct > 1.5: cfo_rec += 'within range but recoverable. Focus on discount governance and invoice accuracy — these two alone typically recover 30-50% of leakage.'
+        else: cfo_rec += 'well-controlled. Shift focus to collections optimisation and working capital efficiency.'
+        if bl["err"] > 5: cfo_rec += f' Invoice error rate at {bl["err"]:.0f}% is cascading into disputes — fixing upstream order validation would reduce this significantly.'
+        st.markdown(f'<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 14px;font-size:0.78rem;color:#1e40af;margin-bottom:0.75rem"><strong>💰 AI Recommendation:</strong> {cfo_rec}</div>',unsafe_allow_html=True)
         c1,c2,c3,c4=st.columns(4)
         with c1: st.markdown(mcard("DSO",f'{bl["dso"]}d',f'{bl["gap"]:+.0f}d vs {bl["bench"]}d',"good" if bl["gap"]<=0 else "bad","Avg DSO_Days. Days from invoice to payment.",f"Bench: {bl['bench']}d for {industry}. Source: APQC; McKinsey O2C Optimization","metric-card metric-card-blue"),unsafe_allow_html=True)
         with c2: st.markdown(mcard("Invoice Errors",f'{bl["err"]}%',"Target: <2%","good" if bl["err"]<2 else "bad","% invoices flagged with errors.","Target: APQC. Expert Interview: portal submission failures cause delays","metric-card metric-card-green" if bl["err"]<2 else "metric-card metric-card-red"),unsafe_allow_html=True)
@@ -1330,7 +1294,15 @@ with tabs[5]:
         ltv_df = st.session_state.ltv
         ca = st.session_state.cash_app
         if ltv_df is not None and len(ltv_df) > 0:
+            # AI recommendation
             avg_ltv = ltv_df["ltv_12m"].mean(); high_churn = (ltv_df["churn_risk"] == "High").sum(); strategic = (ltv_df["segment"] == "Strategic").sum(); avg_health = ltv_df["health_score"].mean()
+            at_risk_rev = ltv_df[ltv_df["churn_risk"].isin(["High","Medium"])]["total_revenue"].sum()
+            ltv_rec = f'Your customer portfolio has {len(ltv_df)} accounts with average 12-month LTV of {fmtc(avg_ltv,ccy)}.'
+            if high_churn > 0: ltv_rec += f' {high_churn} customer{"s are" if high_churn>1 else " is"} flagged as high churn risk with {fmtc(at_risk_rev,ccy,True)} in revenue at stake — proactive outreach should be triggered immediately.'
+            if ca and ca.get("match_rate",0) < 80: ltv_rec += f' Auto cash application match rate is {ca["match_rate"]}% — improving this through AI matching would accelerate cash recognition and reduce apparent AR.'
+            bottom = ltv_df.tail(3)
+            if len(bottom) > 0 and bottom["net_margin_pct"].mean() < 10: ltv_rec += f' Your bottom 3 customers average {bottom["net_margin_pct"].mean():.0f}% net margin after cost-to-serve — consider whether pricing or service level adjustments are needed.'
+            st.markdown(f'<div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:10px;padding:10px 14px;font-size:0.78rem;color:#581c87;margin-bottom:0.75rem"><strong>🏦 AI Recommendation:</strong> {ltv_rec}</div>',unsafe_allow_html=True)
             c1,c2,c3,c4=st.columns(4)
             with c1: st.markdown(mcard("Avg 12M LTV",fmtc(avg_ltv,ccy),"Per customer","neutral","Projected 12-month net margin per customer.","Revenue × margin - cost-to-serve (disputes, returns, deductions)","metric-card metric-card-blue"),unsafe_allow_html=True)
             with c2: st.markdown(mcard("High Churn Risk",f'{high_churn}',"Customers","bad" if high_churn>0 else "good","Customers with health score < 40.","Sime Darby CIDO: AI churn detection cited as priority","metric-card metric-card-red" if high_churn>0 else "metric-card metric-card-green"),unsafe_allow_html=True)
