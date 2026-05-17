@@ -397,14 +397,28 @@ def sample_o2c(region):
         for mo in range(1,max_mo+1):
             n_orders=random.randint(18,24)
             for _ in range(n_orders):
+                cust = random.choice(custs)
                 od=datetime(yr,mo,1)+timedelta(days=random.randint(0,min(27,28)))
                 cd=random.randint(1,5); fd=random.randint(1,4)
                 inv=od+timedelta(days=cd)
-                dso_jitter=int(np.random.normal(dso_base,dso_base*0.22))
-                dso_jitter=max(12,min(dso_jitter,110))
+                # Guardian SG is a problem customer — slow payer, disputes, deductions
+                if cust == "Guardian SG":
+                    dso_jitter=int(np.random.normal(dso_base*1.6,dso_base*0.3))
+                    dso_jitter=max(45,min(dso_jitter,150))
+                    c_err = err_rate * 2.5
+                    c_disp = disp_rate * 4.0
+                    c_ded = 0.35
+                    c_amend = amend_rate * 2.0
+                else:
+                    dso_jitter=int(np.random.normal(dso_base,dso_base*0.22))
+                    dso_jitter=max(12,min(dso_jitter,110))
+                    c_err = err_rate
+                    c_disp = disp_rate
+                    c_ded = 0.08
+                    c_amend = amend_rate
                 pay=inv+timedelta(days=dso_jitter)
                 amt=round(random.uniform(5000,80000),2)
-                rows.append({"Order_ID":f"ORD-{oid}","Customer":random.choice(custs),"Order_Date":od.strftime("%Y-%m-%d"),"Invoice_Date":inv.strftime("%Y-%m-%d"),"Payment_Date":pay.strftime("%Y-%m-%d"),"Invoice_Amount_USD":amt,"DSO_Days":dso_jitter,"Order_Cycle_Days":cd,"Fulfilment_Days":fd,"Invoice_Errors":1 if random.random()<err_rate else 0,"Disputed":1 if random.random()<disp_rate else 0,"OTIF_Flag":1 if random.random()>0.06 else 0,"Return_Flag":1 if random.random()<0.04 else 0,"Amendment_Flag":1 if random.random()<amend_rate else 0,"Deduction_USD":round(random.uniform(50,400) if random.random()<0.08 else 0,2),"Inventory_Days":42,"DPO_Days":32})
+                rows.append({"Order_ID":f"ORD-{oid}","Customer":cust,"Order_Date":od.strftime("%Y-%m-%d"),"Invoice_Date":inv.strftime("%Y-%m-%d"),"Payment_Date":pay.strftime("%Y-%m-%d"),"Invoice_Amount_USD":amt,"DSO_Days":dso_jitter,"Order_Cycle_Days":cd,"Fulfilment_Days":fd,"Invoice_Errors":1 if random.random()<c_err else 0,"Disputed":1 if random.random()<c_disp else 0,"OTIF_Flag":1 if random.random()>0.06 else 0,"Return_Flag":1 if random.random()<0.04 else 0,"Amendment_Flag":1 if random.random()<c_amend else 0,"Deduction_USD":round(random.uniform(100,800) if random.random()<c_ded else 0,2),"Inventory_Days":42,"DPO_Days":32})
                 oid+=1
     return pd.DataFrame(rows)
 
@@ -429,34 +443,33 @@ def parse_maturity_csv(df):
     return region, industry, currency, diag
 
 def get_available_years(df, date_col="Order_Date"):
-    """Extract unique years from dataframe."""
     try:
-        years = sorted(pd.to_datetime(df[date_col]).dt.year.unique().tolist())
+        years = sorted(pd.to_datetime(df[date_col]).dt.year.unique().tolist(), reverse=True)
         labels = []
         for y in years:
             if y == 2026: labels.append("2026 YTD")
             else: labels.append(str(y))
-        return ["All"] + labels
-    except: return ["All"]
+        return ["Last 3 Years"] + labels
+    except: return ["Last 3 Years"]
 
 def get_demand_years(df):
     try:
-        years = sorted(df["Month"].str[:4].unique().tolist())
+        years = sorted(df["Month"].str[:4].unique().tolist(), reverse=True)
         labels = []
         for y in years:
             if y == "2026": labels.append("2026 YTD")
             else: labels.append(y)
-        return ["All"] + labels
-    except: return ["All"]
+        return ["Last 3 Years"] + labels
+    except: return ["Last 3 Years"]
 
 def filter_by_year(df, year, date_col="Order_Date"):
-    if year == "All": return df
+    if year == "Last 3 Years": return df
     yr = int(year.replace(" YTD",""))
     dc = pd.to_datetime(df[date_col])
     return df[dc.dt.year == yr]
 
 def filter_demand_by_year(df, year):
-    if year == "All": return df
+    if year == "Last 3 Years": return df
     yr = year.replace(" YTD","")
     return df[df["Month"].str.startswith(yr)]
 
@@ -1097,10 +1110,10 @@ with tabs[2]:
         fc_years = get_demand_years(st.session_state.fc_df)
         sel_yr = st.radio("Period", fc_years, horizontal=True, key="fc_yr")
         fc_filtered = filter_demand_by_year(st.session_state.fc_df, sel_yr)
-        dm = calc_demand(fc_filtered) if sel_yr != "All" else st.session_state.dm
+        dm = calc_demand(fc_filtered) if sel_yr != "Last 3 Years" else st.session_state.dm
         ob=INDUSTRIES[industry]["otif_benchmark"]
         # AI Recommendation
-        yr_label = f" ({sel_yr})" if sel_yr != "All" else " (All years)"
+        yr_label = f" ({sel_yr})" if sel_yr != "Last 3 Years" else " (All years)"
         fc_rec = f'Forecast accuracy is {dm["accuracy"]:.1f}%{yr_label} with MAPE of {dm["mape"]:.1f}%.'
         if dm["bias"] < -5: fc_rec += f' You are systematically under-forecasting (bias {dm["bias"]:+.1f}%) — demand is consistently higher than planned, creating stockout risk. Consider adding promotional uplift signals and increasing safety stock on high-variance SKUs.'
         elif dm["bias"] > 5: fc_rec += f' You are systematically over-forecasting (bias {dm["bias"]:+.1f}%) — excess inventory is tying up working capital. Tighten your demand signal inputs and review whether historical trends are being over-weighted.'
@@ -1207,10 +1220,10 @@ with tabs[4]:
         o2c_years = get_available_years(st.session_state.o2c_df)
         sel_yr_cfo = st.radio("Period", o2c_years, horizontal=True, key="cfo_yr")
         o2c_filtered = filter_by_year(st.session_state.o2c_df, sel_yr_cfo)
-        bl = calc_billing(o2c_filtered, industry) if sel_yr_cfo != "All" else st.session_state.bl
+        bl = calc_billing(o2c_filtered, industry) if sel_yr_cfo != "Last 3 Years" else st.session_state.bl
         lpct=round((bl["leak_total"]/max(bl["rev"],1))*100,1)
         # AI Recommendation
-        yr_label = f" ({sel_yr_cfo})" if sel_yr_cfo != "All" else " (All years)"
+        yr_label = f" ({sel_yr_cfo})" if sel_yr_cfo != "Last 3 Years" else " (All years)"
         cfo_rec = f'DSO is {bl["dso"]:.0f} days{yr_label}, {"on target — maintain current collections discipline" if bl["gap"]<=0 else f"{bl["gap"]:.0f} days above the {bl["bench"]}d benchmark — each excess day traps working capital"}.'
         cfo_rec += f' Revenue leakage at {fmtc(bl["leak_total"],ccy,True)} ({lpct}% of revenue) — '
         if lpct > 3: cfo_rec += 'this exceeds the 3% threshold. Deploy PriceGuard to enforce pricing discipline from quote to invoice, and automate invoice generation via BillingEngine to close the billing delay gap.'
