@@ -895,25 +895,90 @@ with tabs[1]:
         # === 3-YEAR TREND ===
         ym = st.session_state.yearly_metrics
         if ym and len(ym) > 1:
-            yrs = sorted(ym.keys()); first=ym[yrs[0]]; last=ym[yrs[-1]]
-            acc_d=last["accuracy"]-first["accuracy"]; dso_d=last["dso"]-first["dso"]; otif_d=last["otif"]-first["otif"]; err_d=last["err"]-first["err"]
-            # Trend metric cards
-            st.markdown('<div class="section-card"><div class="section-title">3-Year Performance Trend</div>',unsafe_allow_html=True)
-            tr1,tr2,tr3,tr4=st.columns(4)
-            with tr1: st.markdown(f'<div style="text-align:center"><div style="font-size:0.65rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.08em">Forecast Accuracy</div><div style="font-family:JetBrains Mono;font-size:1.3rem;font-weight:700;color:{"#16a34a" if acc_d>0 else "#dc2626"}">{acc_d:+.1f}%</div><div style="font-size:0.72rem;color:#94a3b8">{first["accuracy"]:.0f}% → {last["accuracy"]:.0f}%</div></div>',unsafe_allow_html=True)
-            with tr2: st.markdown(f'<div style="text-align:center"><div style="font-size:0.65rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.08em">DSO</div><div style="font-family:JetBrains Mono;font-size:1.3rem;font-weight:700;color:{"#16a34a" if dso_d<0 else "#dc2626"}">{dso_d:+.1f}d</div><div style="font-size:0.72rem;color:#94a3b8">{first["dso"]:.0f}d → {last["dso"]:.0f}d</div></div>',unsafe_allow_html=True)
-            with tr3: st.markdown(f'<div style="text-align:center"><div style="font-size:0.65rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.08em">OTIF</div><div style="font-family:JetBrains Mono;font-size:1.3rem;font-weight:700;color:{"#16a34a" if otif_d>0 else "#dc2626"}">{otif_d:+.1f}%</div><div style="font-size:0.72rem;color:#94a3b8">{first["otif"]:.0f}% → {last["otif"]:.0f}%</div></div>',unsafe_allow_html=True)
-            with tr4: st.markdown(f'<div style="text-align:center"><div style="font-size:0.65rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.08em">Error Rate</div><div style="font-family:JetBrains Mono;font-size:1.3rem;font-weight:700;color:{"#16a34a" if err_d<0 else "#dc2626"}">{err_d:+.1f}%</div><div style="font-size:0.72rem;color:#94a3b8">{first["err"]:.0f}% → {last["err"]:.0f}%</div></div>',unsafe_allow_html=True)
-            # Natural language trend analysis
-            trend_parts = []
-            if acc_d > 5: trend_parts.append(f"Forecast accuracy improved significantly by {acc_d:.0f} percentage points — your demand planning matured over this period")
-            elif acc_d > 0: trend_parts.append(f"Forecast accuracy improved modestly ({acc_d:+.1f}%) — progress is real but slow")
-            else: trend_parts.append(f"Forecast accuracy declined ({acc_d:+.1f}%) — this warrants investigation into demand signal quality or model drift")
-            if dso_d < -5: trend_parts.append(f"DSO dropped {abs(dso_d):.0f} days — your collections and invoicing processes got faster")
-            elif dso_d < 0: trend_parts.append(f"DSO improved slightly ({dso_d:+.0f}d)")
-            else: trend_parts.append(f"DSO increased by {dso_d:.0f} days — cash cycle is getting longer, not shorter")
-            if last["leakage_pct"] > 3: trend_parts.append(f"Revenue leakage at {last['leakage_pct']}% in the latest year is still above the 3% threshold — pricing governance remains a gap")
-            st.markdown(f'<div style="background:#f8fafc;border-radius:10px;padding:10px 14px;font-size:0.78rem;color:#334155;line-height:1.55;margin-top:0.75rem">{". ".join(trend_parts)}.</div>',unsafe_allow_html=True)
+            yrs = sorted(ym.keys())
+            st.markdown('<div class="section-card"><div class="section-title">Performance Trend — Year by Year</div>',unsafe_allow_html=True)
+            # Build the table
+            metrics = [
+                ("Forecast Accuracy", "accuracy", "%", True, "higher is better"),
+                ("DSO", "dso", "d", False, "lower is better"),
+                ("OTIF", "otif", "%", True, "higher is better"),
+                ("Error Rate", "err", "%", False, "lower is better"),
+                ("Dispute Rate", "disp", "%", False, "lower is better"),
+                ("Revenue Leakage", "leakage_pct", "%", False, "lower is better"),
+            ]
+            # Table header
+            ytd_label = "2026 YTD" if "2026" in yrs[-1] else yrs[-1]
+            tbl = '<table class="cp-table"><tr><th style="text-align:left">Metric</th>'
+            for yr in yrs:
+                label = "2026 YTD" if "2026" in yr else yr
+                tbl += f'<th style="text-align:center">{label}</th>'
+            tbl += '<th style="text-align:center">Trend</th></tr>'
+            for name, key, unit, higher_good, hint in metrics:
+                tbl += f'<tr><td style="font-weight:500">{name} <span style="font-size:0.6rem;color:#94a3b8">({hint})</span></td>'
+                vals = [ym[yr].get(key, 0) for yr in yrs]
+                for i, yr in enumerate(yrs):
+                    v = ym[yr].get(key, 0)
+                    # Color: compare to previous year
+                    if i > 0:
+                        prev = vals[i-1]
+                        if higher_good:
+                            co = "#16a34a" if v > prev else "#dc2626" if v < prev else "#64748b"
+                            arrow = "▲" if v > prev else "▼" if v < prev else "—"
+                        else:
+                            co = "#16a34a" if v < prev else "#dc2626" if v > prev else "#64748b"
+                            arrow = "▼" if v < prev else "▲" if v > prev else "—"
+                        tbl += f'<td style="text-align:center;color:{co};font-weight:600">{v:.1f}{unit} <span style="font-size:0.65rem">{arrow}</span></td>'
+                    else:
+                        tbl += f'<td style="text-align:center;color:#64748b">{v:.1f}{unit}</td>'
+                # Overall trend arrow
+                total_d = vals[-1] - vals[0]
+                if higher_good:
+                    t_co = "#16a34a" if total_d > 0 else "#dc2626" if total_d < 0 else "#64748b"
+                else:
+                    t_co = "#16a34a" if total_d < 0 else "#dc2626" if total_d > 0 else "#64748b"
+                tbl += f'<td style="text-align:center;font-family:JetBrains Mono;font-weight:700;color:{t_co}">{total_d:+.1f}{unit}</td></tr>'
+            tbl += '</table>'
+            st.markdown(tbl, unsafe_allow_html=True)
+
+            # Smart natural language analysis — year by year
+            analysis = []
+            # Accuracy trend
+            acc_vals = [ym[yr]["accuracy"] for yr in yrs]
+            acc_deltas = [acc_vals[i]-acc_vals[i-1] for i in range(1, len(acc_vals))]
+            if all(d > 0 for d in acc_deltas):
+                if acc_deltas[-1] < acc_deltas[0] * 0.5:
+                    analysis.append(f"Forecast accuracy has improved consistently ({acc_vals[0]:.0f}% → {acc_vals[-1]:.0f}%) but gains are decelerating — the last year added only {acc_deltas[-1]:+.1f}% compared to {acc_deltas[0]:+.1f}% in the first year. Diminishing returns suggest the current forecasting method is reaching its ceiling; ML-assisted models would unlock the next step change.")
+                else:
+                    analysis.append(f"Forecast accuracy is on a strong upward trajectory ({acc_vals[0]:.0f}% → {acc_vals[-1]:.0f}%), with steady year-on-year improvement. The current approach is working — sustain investment and focus on closing the gap on underperforming SKUs.")
+            elif any(d < 0 for d in acc_deltas):
+                dip_yr = yrs[1 + acc_deltas.index(min(acc_deltas))]
+                analysis.append(f"Forecast accuracy dipped in {dip_yr} ({min(acc_deltas):+.1f}%) before recovering. This inconsistency suggests the forecasting process is fragile — dependent on individual judgment rather than a systematic model. Investigate what changed in {dip_yr}.")
+            # DSO trend
+            dso_vals = [ym[yr]["dso"] for yr in yrs]
+            dso_deltas = [dso_vals[i]-dso_vals[i-1] for i in range(1, len(dso_vals))]
+            if all(d <= 0 for d in dso_deltas):
+                if abs(dso_deltas[-1]) < 1:
+                    analysis.append(f"DSO has been improving ({dso_vals[0]:.0f}d → {dso_vals[-1]:.0f}d) but has plateaued in the latest period — only {dso_deltas[-1]:+.1f}d change. Further reduction likely requires process automation (auto-invoicing, predictive collections) rather than operational effort alone.")
+                else:
+                    analysis.append(f"DSO dropped steadily from {dso_vals[0]:.0f}d to {dso_vals[-1]:.0f}d — your collections discipline is improving year on year. Keep the momentum and target the {INDUSTRIES[industry]['dso_benchmark']}d benchmark.")
+            elif any(d > 0 for d in dso_deltas):
+                spike_yr = yrs[1 + dso_deltas.index(max(dso_deltas))]
+                analysis.append(f"DSO spiked in {spike_yr} ({max(dso_deltas):+.1f}d) — this could indicate a customer payment issue, billing delay, or seasonal effect. Overall trend is {dso_vals[0]:.0f}d → {dso_vals[-1]:.0f}d.")
+            # OTIF trend
+            otif_vals = [ym[yr]["otif"] for yr in yrs]
+            bench = INDUSTRIES[industry]["otif_benchmark"]
+            if otif_vals[-1] >= bench:
+                analysis.append(f"OTIF reached {otif_vals[-1]:.0f}%, meeting the {bench}% benchmark. Focus shifts from improvement to consistency — maintain this level while optimising fulfilment cost.")
+            else:
+                analysis.append(f"OTIF at {otif_vals[-1]:.0f}% is still below the {bench}% benchmark (gap: {bench-otif_vals[-1]:.0f}%). Year-on-year progress ({otif_vals[0]:.0f}% → {otif_vals[-1]:.0f}%) is positive but needs to accelerate.")
+            # Error rate trend
+            err_vals = [ym[yr]["err"] for yr in yrs]
+            if err_vals[-1] < 3:
+                analysis.append(f"Error rate at {err_vals[-1]:.1f}% is within acceptable range and trending down from {err_vals[0]:.1f}%. Continued improvement will reduce dispute cascading downstream.")
+            else:
+                analysis.append(f"Error rate at {err_vals[-1]:.1f}% remains above the 3% target despite improving from {err_vals[0]:.1f}%. Each error cascades into disputes and DSO extension — this is a high-ROI area for automation.")
+
+            st.markdown(f'<div style="background:linear-gradient(135deg,#f8fafc,#f1f5f9);border-radius:10px;padding:12px 16px;font-size:0.82rem;color:#334155;line-height:1.65;margin-top:0.75rem">{" ".join(analysis)}</div>',unsafe_allow_html=True)
             st.markdown("</div>",unsafe_allow_html=True)
 
         # === AI INSIGHT PANELS ===
