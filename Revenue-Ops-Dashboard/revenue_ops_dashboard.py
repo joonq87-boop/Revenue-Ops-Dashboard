@@ -403,13 +403,13 @@ def sample_o2c(region):
     return pd.DataFrame(rows)
 
 def sample_maturity(region="Singapore",industry="F&B / FMCG",currency="USD"):
-    """Generate maturity assessment CSV with realistic mixed levels for demo."""
+    """Generate maturity assessment CSV — realistic spread: some advanced, some middle, some weak."""
     rows=[
         {"Parameter":"region","Value":region},{"Parameter":"industry","Value":industry},{"Parameter":"currency","Value":currency},
-        {"Parameter":"df_method","Value":"1"},{"Parameter":"df_tracking","Value":"1"},{"Parameter":"df_customer_data","Value":"2"},
-        {"Parameter":"om_channel","Value":"1"},{"Parameter":"om_validation","Value":"0"},{"Parameter":"om_amendments","Value":"1"},
-        {"Parameter":"fl_otif","Value":"2"},{"Parameter":"fl_wms","Value":"1"},{"Parameter":"fl_visibility","Value":"1"},
-        {"Parameter":"br_invoicing","Value":"0"},{"Parameter":"br_discount","Value":"1"},{"Parameter":"br_portal","Value":"2"},
+        {"Parameter":"df_method","Value":"2"},{"Parameter":"df_tracking","Value":"1"},{"Parameter":"df_customer_data","Value":"3"},
+        {"Parameter":"om_channel","Value":"1"},{"Parameter":"om_validation","Value":"0"},{"Parameter":"om_amendments","Value":"2"},
+        {"Parameter":"fl_otif","Value":"3"},{"Parameter":"fl_wms","Value":"1"},{"Parameter":"fl_visibility","Value":"2"},
+        {"Parameter":"br_invoicing","Value":"0"},{"Parameter":"br_discount","Value":"1"},{"Parameter":"br_portal","Value":"3"},
         {"Parameter":"ps_collections","Value":"1"},{"Parameter":"ps_aging","Value":"2"},{"Parameter":"ps_cash_app","Value":"0"},
     ]
     return pd.DataFrame(rows)
@@ -913,13 +913,10 @@ with tabs[1]:
         }
 
         for qk, ans_idx in diag.items():
-            if ans_idx >= 2: continue  # Level 3-4, not a bottleneck
+            if ans_idx >= 2: continue
             key = (qk, ans_idx)
             if key in REC_MAP:
                 rec = REC_MAP[key].copy()
-                # Compute estimated score impact
-                rec["score_impact"] = round(drags.get(rec.get("module_key", ""), {}).get("drag", 8) * 0.4, 0)
-                # Find the answer text
                 for mod_d, qs in DIAGNOSTIC.items():
                     for q in qs:
                         if q["key"] == qk:
@@ -927,23 +924,37 @@ with tabs[1]:
                             break
                 all_recs.append(rec)
 
-        # Also add data-driven recs
+        # Data-driven recs (always check)
         if st.session_state.dm["accuracy"] < 85:
-            all_recs.append({"action": f"Improve forecast accuracy from {st.session_state.dm['accuracy']}% toward 85%+ target", "module": "Demand Forecasting", "timeline": "Ongoing", "impact": f"Current {st.session_state.dm['mape']}% MAPE is above the 15% industry benchmark", "tier": 2, "because": f"Data: forecast accuracy at {st.session_state.dm['accuracy']}%"})
-        if st.session_state.bl["gap"] > 10:
-            all_recs.append({"action": f"Reduce DSO from {st.session_state.bl['dso']:.0f} days toward {st.session_state.bl['bench']} day benchmark", "module": "Billing & Revenue", "timeline": "4-8 weeks", "impact": f"{st.session_state.bl['gap']:.0f} day gap represents {fmtc(st.session_state.bl['rev']*st.session_state.bl['gap']/365,ccy,True)} in trapped working capital", "tier": 1, "because": f"Data: DSO {st.session_state.bl['gap']:.0f} days above benchmark"})
-        if st.session_state.ps["aging"]["90d"] > 10:
-            all_recs.append({"action": "Reduce AR aging past 90 days from critical levels", "module": "Post-Sales & Closure", "timeline": "Immediate", "impact": f"{st.session_state.ps['aging']['90d']}% past 90 days creates significant write-off exposure", "tier": 1, "because": f"Data: {st.session_state.ps['aging']['90d']}% receivables past 90 days"})
+            all_recs.append({"action": f"Improve forecast accuracy from {st.session_state.dm['accuracy']}% toward 85%+ target", "module": "Demand Forecasting", "timeline": "Ongoing", "tier": 2, "because": f"Data: accuracy at {st.session_state.dm['accuracy']}%"})
+        if st.session_state.bl["gap"] > 5:
+            all_recs.append({"action": f"Reduce DSO from {st.session_state.bl['dso']:.0f}d toward {st.session_state.bl['bench']}d benchmark", "module": "Billing & Revenue", "timeline": "4-8 weeks", "tier": 1, "because": f"Data: DSO {st.session_state.bl['gap']:.0f}d above benchmark"})
+        if st.session_state.ps["aging"]["90d"] > 5:
+            all_recs.append({"action": "Reduce AR aging past 90 days — deploy predictive collections", "module": "Post-Sales & Closure", "timeline": "4-6 weeks", "tier": 1, "because": f"Data: {st.session_state.ps['aging']['90d']}% past 90 days"})
+        if st.session_state.om["err"] > 3:
+            all_recs.append({"action": f"Reduce invoice error rate from {st.session_state.om['err']:.0f}% — automate order validation", "module": "Order Management", "timeline": "6-8 weeks", "tier": 1, "because": f"Data: {st.session_state.om['err']:.0f}% error rate"})
+        if st.session_state.om["disp"] > 3:
+            all_recs.append({"action": f"Reduce dispute rate from {st.session_state.om['disp']:.0f}% — deploy CollectIQ dispute engine", "module": "Order Management", "timeline": "4-6 weeks", "tier": 1, "because": f"Data: {st.session_state.om['disp']:.0f}% dispute rate"})
+        if st.session_state.fl["otif"] < INDUSTRIES[industry]["otif_benchmark"]:
+            all_recs.append({"action": f"Improve OTIF from {st.session_state.fl['otif']:.0f}% toward {INDUSTRIES[industry]['otif_benchmark']}% benchmark", "module": "Fulfilment & Logistics", "timeline": "6-10 weeks", "tier": 2, "because": f"Data: OTIF below benchmark"})
+
+        # Guaranteed fallback if somehow empty
+        if not all_recs:
+            all_recs = [
+                {"action": "Deploy Revenue Optimizer CFO Dashboard for real-time O2C visibility", "module": "Platform", "timeline": "2-4 weeks", "tier": 1},
+                {"action": "Automate invoice generation on shipment confirmation", "module": "Billing & Revenue", "timeline": "4-6 weeks", "tier": 1},
+                {"action": "Implement AI-driven collections prioritisation", "module": "Post-Sales & Closure", "timeline": "4-6 weeks", "tier": 1},
+                {"action": "Deploy ML ensemble forecasting with external signals", "module": "Demand Forecasting", "timeline": "8-12 weeks", "tier": 2},
+                {"action": "Automate multi-channel order ingestion with LLM/OCR", "module": "Order Management", "timeline": "6-10 weeks", "tier": 2},
+                {"action": "Implement customer LTV scoring for commercial decisions", "module": "Post-Sales & Closure", "timeline": "6-8 weeks", "tier": 2},
+            ]
 
         # Sort: tier 1 first, then tier 2
         tier1 = [r for r in all_recs if r.get("tier") == 1][:3]
-        tier2 = [r for r in all_recs if r.get("tier") == 2 or (r.get("tier") == 1 and r not in tier1)][:3]
-        if len(tier1) < 3:
-            extras = [r for r in all_recs if r not in tier1 and r not in tier2]
-            tier1.extend(extras[:3 - len(tier1)])
-        if len(tier2) < 3:
-            extras2 = [r for r in all_recs if r not in tier1 and r not in tier2]
-            tier2.extend(extras2[:3 - len(tier2)])
+        remaining = [r for r in all_recs if r not in tier1]
+        tier2 = [r for r in remaining if r.get("tier") == 2][:3]
+        if len(tier2) < 3: tier2.extend([r for r in remaining if r not in tier2][:3 - len(tier2)])
+        if len(tier1) < 3: tier1.extend(remaining[:3 - len(tier1)])
 
         # Render recommendations
         r1col, r2col = st.columns(2)
