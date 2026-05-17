@@ -403,14 +403,14 @@ def sample_o2c(region):
     return pd.DataFrame(rows)
 
 def sample_maturity(region="Singapore",industry="F&B / FMCG",currency="USD"):
-    """Generate maturity assessment CSV — realistic spread: some advanced, some middle, some weak."""
+    """Generate maturity assessment CSV — company doing well with a few specific gaps."""
     rows=[
         {"Parameter":"region","Value":region},{"Parameter":"industry","Value":industry},{"Parameter":"currency","Value":currency},
-        {"Parameter":"df_method","Value":"2"},{"Parameter":"df_tracking","Value":"1"},{"Parameter":"df_customer_data","Value":"3"},
-        {"Parameter":"om_channel","Value":"1"},{"Parameter":"om_validation","Value":"0"},{"Parameter":"om_amendments","Value":"2"},
-        {"Parameter":"fl_otif","Value":"3"},{"Parameter":"fl_wms","Value":"1"},{"Parameter":"fl_visibility","Value":"2"},
-        {"Parameter":"br_invoicing","Value":"0"},{"Parameter":"br_discount","Value":"1"},{"Parameter":"br_portal","Value":"3"},
-        {"Parameter":"ps_collections","Value":"1"},{"Parameter":"ps_aging","Value":"2"},{"Parameter":"ps_cash_app","Value":"0"},
+        {"Parameter":"df_method","Value":"2"},{"Parameter":"df_tracking","Value":"2"},{"Parameter":"df_customer_data","Value":"3"},
+        {"Parameter":"om_channel","Value":"2"},{"Parameter":"om_validation","Value":"1"},{"Parameter":"om_amendments","Value":"3"},
+        {"Parameter":"fl_otif","Value":"3"},{"Parameter":"fl_wms","Value":"2"},{"Parameter":"fl_visibility","Value":"3"},
+        {"Parameter":"br_invoicing","Value":"1"},{"Parameter":"br_discount","Value":"2"},{"Parameter":"br_portal","Value":"3"},
+        {"Parameter":"ps_collections","Value":"2"},{"Parameter":"ps_aging","Value":"3"},{"Parameter":"ps_cash_app","Value":"0"},
     ]
     return pd.DataFrame(rows)
 
@@ -636,7 +636,7 @@ def reset():
 
 ccy=st.session_state.display_ccy; ccy_label=CURRENCIES.get(ccy,CURRENCIES["USD"])["label"]
 st.markdown(f'<div class="tct-header"><div><div class="tct-title">Revenue Optimizer</div><div class="tct-subtitle">AI-Powered Revenue Operations Intelligence Platform</div></div><div style="display:flex;align-items:center;gap:12px"><span class="tct-badge">AI Engine: Active</span><span class="tct-currency">{ccy_label}</span></div></div>',unsafe_allow_html=True)
-h1,h2,h3,h4,h5=st.columns([1,1,0.7,0.4,0.4])
+h1,h2,h3,h4=st.columns([1,1,0.7,0.5])
 with h1: region=st.selectbox("Region",list(REGIONS.keys()),index=list(REGIONS.keys()).index(st.session_state.region)); st.session_state.region=region
 with h2: industry=st.selectbox("Industry",list(INDUSTRIES.keys()),index=list(INDUSTRIES.keys()).index(st.session_state.industry)); st.session_state.industry=industry
 with h3:
@@ -644,10 +644,7 @@ with h3:
     sel=st.selectbox("Currency",co,index=ci,format_func=lambda x:CURRENCIES[x]["label"]); st.session_state.display_ccy=sel; ccy=sel
 with h4:
     st.markdown("<br>",unsafe_allow_html=True)
-    if st.button("Demo Data"): st.session_state.fc_df=sample_demand(); st.session_state.o2c_df=sample_o2c(region); st.session_state.fc_hash="s"; st.session_state.o2c_hash="s"; st.session_state.done=False; st.rerun()
-with h5:
-    st.markdown("<br>",unsafe_allow_html=True)
-    if st.button("Reset"): reset(); st.rerun()
+    if st.button("🔄 Refresh"): reset(); st.rerun()
 
 tabs=st.tabs(["⚙ Setup","🏥 Executive Health Report","📊 ForecastIQ Dashboard","📋 O2C Performance Hub","💰 CFO Dashboard","🏦 Cash App & LTV Engine"])
 
@@ -696,7 +693,7 @@ with tabs[0]:
                 st.session_state.region=r; st.session_state.industry=ind; st.session_state.display_ccy=cur; st.session_state.diag_responses=diag
             st.success(f"✓ Config: {st.session_state.region}, {st.session_state.industry}")
     st.markdown("</div>",unsafe_allow_html=True)
-    b1,b2,b3=st.columns([1,1,1])
+    b1,b2=st.columns([1,1])
     with b1:
         if st.button("📥 Load Demo Data",use_container_width=True):
             st.session_state.fc_df=sample_demand(); st.session_state.o2c_df=sample_o2c("Singapore"); st.session_state.maturity_df=sample_maturity()
@@ -728,8 +725,6 @@ with tabs[0]:
                     try: st.session_state.ai_agents=get_agent_simulation(st.session_state.dm,st.session_state.om,st.session_state.fl,st.session_state.bl,st.session_state.ps,st.session_state.mod_scores,region,industry,ccy)
                     except: pass
                 st.session_state.done=True; st.rerun()
-    with b3:
-        if st.button("🔄 Reset",use_container_width=True): reset(); st.rerun()
     if st.session_state.fc_df is not None:
         st.markdown(f'<div class="info-box">📊 Data loaded — Demand: {len(st.session_state.fc_df)} rows · O2C: {len(st.session_state.o2c_df) if st.session_state.o2c_df is not None else 0} rows · Config: {st.session_state.region}, {st.session_state.industry}, {st.session_state.display_ccy}</div>',unsafe_allow_html=True)
     if st.session_state.done: st.success("Analysis complete — explore tabs above.")
