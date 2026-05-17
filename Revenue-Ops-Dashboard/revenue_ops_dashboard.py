@@ -811,25 +811,40 @@ with tabs[1]:
         </div>''',unsafe_allow_html=True)
 
         # === MODULE HEALTH BARS ===
-        st.markdown('<div class="section-card"><div class="section-title">Module Health — Data vs Process Maturity</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:1rem">Each bar shows your score split into two parts: <span style="color:#0369a1;font-weight:600">blue = data quality</span> and <span style="font-weight:600">colored segment = what your processes allow you to achieve</span>. The gap between them is the drag from current process inefficiencies reported in your setup assessment.</div>',unsafe_allow_html=True)
+        st.markdown('<div class="section-card"><div class="section-title">Module Health — Data vs Process Maturity</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:1rem">Each bar shows your blended score. The hatched zone shows where process maturity is holding back your data potential. Right label shows overall status and any drag.</div>',unsafe_allow_html=True)
         for mod_name in ms:
             d = drags[mod_name]
             sc = scolor(d["blended"])
             icon = MODULE_ICONS.get(mod_name, "")
             drag_val = d["drag"]
-            if drag_val > 15: drag_label, drag_co = f"−{drag_val} pts drag", "#dc2626"
-            elif drag_val > 5: drag_label, drag_co = f"−{drag_val} pts drag", "#f59e0b"
-            elif drag_val > 0: drag_label, drag_co = f"−{drag_val} pts", "#94a3b8"
-            else: drag_label, drag_co = "No drag", "#16a34a"
-            st.markdown(f'''<div style="display:flex;align-items:center;gap:14px;padding:8px 0;border-bottom:1px solid #f8fafc">
-                <div style="width:200px;flex-shrink:0;font-size:0.8rem;font-weight:600;color:#0f172a">{icon} {mod_name}</div>
-                <div style="flex:1;position:relative;height:22px;background:#f1f5f9;border-radius:6px;overflow:hidden">
+            # Status label: combine health + drag
+            if d["blended"] < 30:
+                status_label = f'Critical ({d["blended"]}/100)'
+                status_co = "#dc2626"
+                if drag_val > 5: status_label += f' · −{drag_val} pts drag'
+            elif d["blended"] < 50:
+                status_label = f'Needs work ({d["blended"]}/100)'
+                status_co = "#ea580c"
+                if drag_val > 5: status_label += f' · −{drag_val} pts drag'
+            elif d["blended"] < 70:
+                status_label = f'Improving ({d["blended"]}/100)'
+                status_co = "#f59e0b"
+                if drag_val > 5: status_label += f' · −{drag_val} pts drag'
+            else:
+                status_label = f'Good ({d["blended"]}/100)'
+                status_co = "#16a34a"
+                if drag_val > 5: status_label += f' · −{drag_val} pts drag'
+            # Bar background color based on severity
+            bar_bg = "#fef2f2" if d["blended"] < 30 else "#fffbeb" if d["blended"] < 50 else "#f1f5f9"
+            st.markdown(f'''<div style="display:flex;align-items:center;gap:14px;padding:10px 8px;border-bottom:1px solid #f1f5f9;background:{bar_bg};border-radius:8px;margin-bottom:4px">
+                <div style="width:200px;flex-shrink:0;font-size:0.82rem;font-weight:600;color:#0f172a">{icon} {mod_name}</div>
+                <div style="flex:1;position:relative;height:24px;background:#e2e8f0;border-radius:6px;overflow:hidden">
                     <div style="position:absolute;left:0;top:0;height:100%;width:{d["data"]}%;background:rgba(3,105,161,0.15);border-radius:6px"></div>
-                    <div style="position:absolute;left:0;top:0;height:100%;width:{d["blended"]}%;background:{sc};border-radius:6px;opacity:0.85"></div>
-                    <div style="position:absolute;left:{d["blended"]}%;top:0;height:100%;width:{max(0,d["data"]-d["blended"])}%;background:repeating-linear-gradient(45deg,transparent,transparent 3px,rgba(220,38,38,0.12) 3px,rgba(220,38,38,0.12) 6px);border-radius:0 6px 6px 0"></div>
-                    <div style="position:absolute;top:50%;left:8px;transform:translateY(-50%);font-family:JetBrains Mono;font-size:0.72rem;font-weight:700;color:white;text-shadow:0 1px 2px rgba(0,0,0,0.3)">{d["blended"]}</div>
+                    <div style="position:absolute;left:0;top:0;height:100%;width:{d["blended"]}%;background:{sc};border-radius:6px"></div>
+                    <div style="position:absolute;left:{d["blended"]}%;top:0;height:100%;width:{max(0,d["data"]-d["blended"])}%;background:repeating-linear-gradient(45deg,transparent,transparent 3px,rgba(220,38,38,0.15) 3px,rgba(220,38,38,0.15) 6px);border-radius:0 6px 6px 0"></div>
+                    <div style="position:absolute;top:50%;left:8px;transform:translateY(-50%);font-family:JetBrains Mono;font-size:0.75rem;font-weight:700;color:white;text-shadow:0 1px 3px rgba(0,0,0,0.4)">{d["blended"]}</div>
                 </div>
-                <div style="width:100px;flex-shrink:0;text-align:right;font-family:JetBrains Mono;font-size:0.75rem;font-weight:600;color:{drag_co}">{drag_label}</div>
+                <div style="width:180px;flex-shrink:0;text-align:right;font-family:JetBrains Mono;font-size:0.72rem;font-weight:700;color:{status_co}">{status_label}</div>
             </div>''',unsafe_allow_html=True)
         st.markdown('<div style="display:flex;gap:16px;margin-top:0.75rem;font-size:0.68rem;color:#94a3b8"><span>█ Blended score (what you achieve today)</span><span style="color:#0369a1">░ Data potential (if processes were optimised)</span><span style="color:#dc2626">▒ Process drag (your setup answers)</span></div>',unsafe_allow_html=True)
         st.markdown("</div>",unsafe_allow_html=True)
