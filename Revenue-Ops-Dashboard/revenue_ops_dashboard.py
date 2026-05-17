@@ -1200,78 +1200,77 @@ with tabs[2]:
 
         # === 6-MONTH DEMAND PROJECTION ===
         st.markdown("<br>",unsafe_allow_html=True)
-        st.markdown('<div class="section-card"><div class="section-title">6-Month Demand Projection by SKU</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.75rem">Projected demand based on historical seasonal patterns and trend from your data. The model calculates monthly seasonal indices from the past 3 years and applies them to the forward trend.</div>',unsafe_allow_html=True)
+        st.markdown('<div class="section-card"><div class="section-title">6-Month Demand Projection by SKU</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.75rem">Projected demand based on historical seasonal patterns and trend. Method: seasonal decomposition from past data × trend extrapolation.</div>',unsafe_allow_html=True)
         try:
             fc_full = st.session_state.fc_df.copy()
             fc_full["Date"] = pd.to_datetime(fc_full["Month"] + "-01")
             fc_full["MonthNum"] = fc_full["Date"].dt.month
-            fc_full["YearNum"] = fc_full["Date"].dt.year
             skus = fc_full["SKU"].unique()
-            proj_rows = []
             last_date = fc_full["Date"].max()
             proj_months = pd.date_range(last_date + pd.DateOffset(months=1), periods=6, freq="MS")
+            proj_labels = [pm.strftime("%b %y") for pm in proj_months]
+            all_proj = {}
+            all_hist = {}
 
             for sku in skus:
                 sd = fc_full[fc_full["SKU"] == sku].sort_values("Date")
                 monthly_avg = sd.groupby("MonthNum")["Actual_Units"].mean()
                 overall_avg = sd["Actual_Units"].mean()
                 seasonal_idx = (monthly_avg / overall_avg).to_dict()
-                # Simple trend: avg of last 6 months vs avg of first 6 months
                 recent_avg = sd.tail(6)["Actual_Units"].mean()
                 early_avg = sd.head(6)["Actual_Units"].mean()
                 monthly_trend = (recent_avg - early_avg) / max(len(sd), 1)
+                projections = []
                 for i, pm in enumerate(proj_months):
                     base = recent_avg + monthly_trend * (i + 1)
                     si = seasonal_idx.get(pm.month, 1.0)
-                    projected = int(base * si)
-                    proj_rows.append({"SKU": sku, "Month": pm.strftime("%Y-%m"), "Projected": projected, "MonthLabel": pm.strftime("%b %Y")})
+                    projections.append(int(base * si))
+                all_proj[sku] = projections
+                all_hist[sku] = sd.tail(6)["Actual_Units"].tolist()
 
-            proj_df = pd.DataFrame(proj_rows)
-
-            # Chart: historical + projection per SKU
+            # Table
+            tbl = '<table class="cp-table"><tr><th style="text-align:left">SKU</th><th style="text-align:right">Avg (6M)</th>'
+            for lb in proj_labels:
+                tbl += f'<th style="text-align:right">{lb}</th>'
+            tbl += '<th style="text-align:right">6M Total</th><th style="text-align:center;width:140px">Trend</th></tr>'
             for sku in skus:
-                hist = fc_full[fc_full["SKU"] == sku][["Month","Actual_Units"]].tail(12).copy()
-                hist.columns = ["Month","Units"]
-                hist["Type"] = "Actual"
-                proj = proj_df[proj_df["SKU"] == sku][["Month","Projected"]].copy()
-                proj.columns = ["Month","Units"]
-                proj["Type"] = "Projected"
-                # Add last actual point to projection for continuity
-                bridge = hist.tail(1).copy(); bridge["Type"] = "Projected"
-                combined = pd.concat([hist, bridge, proj], ignore_index=True)
-                combined["Units"] = combined["Units"].astype(int)
-
-                tt = [alt.Tooltip("Month:N"), alt.Tooltip("Units:Q", format=","), alt.Tooltip("Type:N")]
-                chart = alt.Chart(combined).mark_line(
-                    point=alt.OverlayMarkDef(size=30),
-                    strokeWidth=2
-                ).encode(
-                    x=alt.X("Month:N", sort=None, title=None),
-                    y=alt.Y("Units:Q", title="Units", axis=alt.Axis(format=",", labelExpr="datum.value >= 1000 ? format(datum.value, ',.0f') : datum.value")),
-                    color=alt.Color("Type:N", scale=alt.Scale(domain=["Actual","Projected"], range=["#0f172a","#7c3aed"]), legend=alt.Legend(orient="top")),
-                    strokeDash=alt.StrokeDash("Type:N", scale=alt.Scale(domain=["Actual","Projected"], range=[[0],[6,4]])),
-                    tooltip=tt
-                ).properties(height=180, width="container", title=alt.TitleParams(text=sku, fontSize=13, anchor="start"))
-                st.altair_chart(chart, use_container_width=True)
-
-            # Summary table
-            st.markdown('<div style="font-size:0.75rem;font-weight:600;color:#64748b;margin-top:0.75rem;margin-bottom:0.4rem">PROJECTION SUMMARY (Units)</div>',unsafe_allow_html=True)
-            pivot = proj_df.pivot(index="SKU", columns="Month", values="Projected").reset_index()
-            # Format with commas
-            for col in pivot.columns[1:]:
-                pivot[col] = pivot[col].apply(lambda x: f"{int(x):,}")
-            tbl_html = '<table class="cp-table"><tr><th>SKU</th>'
-            for col in pivot.columns[1:]:
-                tbl_html += f'<th>{col}</th>'
-            tbl_html += '</tr>'
-            for _, row in pivot.iterrows():
-                tbl_html += f'<tr><td style="font-weight:500">{row["SKU"]}</td>'
-                for col in pivot.columns[1:]:
-                    tbl_html += f'<td>{row[col]}</td>'
-                tbl_html += '</tr>'
-            tbl_html += '</table>'
-            st.markdown(tbl_html, unsafe_allow_html=True)
-            st.markdown('<div style="font-size:0.7rem;color:#94a3b8;margin-top:0.4rem">Projection method: Seasonal decomposition from historical monthly averages × trend extrapolation. Not a machine learning forecast — intended for directional planning.</div>',unsafe_allow_html=True)
+                vals = all_proj[sku]
+                avg6 = int(np.mean(all_hist[sku]))
+                total = sum(vals)
+                trend_vs_hist = total - avg6 * 6
+                trend_pct = round(trend_vs_hist / max(avg6 * 6, 1) * 100, 1)
+                trend_co = "#16a34a" if trend_pct >= 0 else "#dc2626"
+                trend_arrow = "↑" if trend_pct >= 0 else "↓"
+                # Sparkline SVG
+                combined = all_hist[sku][-4:] + vals
+                if combined:
+                    mn, mx = min(combined), max(combined)
+                    rng = max(mx - mn, 1)
+                    w, h = 130, 32
+                    pts_hist = []
+                    pts_proj = []
+                    for i, v in enumerate(combined):
+                        x = i * (w / (len(combined) - 1)) if len(combined) > 1 else w / 2
+                        y = h - ((v - mn) / rng * (h - 4)) - 2
+                        if i < 4: pts_hist.append(f"{x:.1f},{y:.1f}")
+                        if i >= 3: pts_proj.append(f"{x:.1f},{y:.1f}")
+                    svg = f'<svg width="{w}" height="{h}" style="vertical-align:middle">'
+                    if pts_hist: svg += f'<polyline points="{" ".join(pts_hist)}" fill="none" stroke="#0f172a" stroke-width="1.5"/>'
+                    if pts_proj: svg += f'<polyline points="{" ".join(pts_proj)}" fill="none" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="4,3"/>'
+                    # Divider line at projection start
+                    div_x = 3 * (w / (len(combined) - 1)) if len(combined) > 1 else 0
+                    svg += f'<line x1="{div_x:.1f}" y1="0" x2="{div_x:.1f}" y2="{h}" stroke="#94a3b8" stroke-width="0.5" stroke-dasharray="2,2"/>'
+                    svg += '</svg>'
+                else:
+                    svg = ''
+                tbl += f'<tr><td style="font-weight:500">{sku}</td><td style="text-align:right">{avg6:,}</td>'
+                for v in vals:
+                    tbl += f'<td style="text-align:right">{v:,}</td>'
+                tbl += f'<td style="text-align:right;font-weight:600">{total:,}</td>'
+                tbl += f'<td style="text-align:center">{svg} <span style="font-size:0.72rem;color:{trend_co};font-weight:600">{trend_arrow} {trend_pct:+.1f}%</span></td></tr>'
+            tbl += '</table>'
+            st.markdown(tbl, unsafe_allow_html=True)
+            st.markdown('<div style="font-size:0.68rem;color:#94a3b8;margin-top:0.5rem"><span style="color:#0f172a">━</span> Historical <span style="color:#7c3aed">╌</span> Projected · Avg (6M) = trailing 6-month average actual units · Trend = projected 6M total vs trailing 6M total</div>',unsafe_allow_html=True)
         except Exception as e:
             st.markdown(f'<div style="font-size:0.78rem;color:#94a3b8">Projection unavailable: {e}</div>',unsafe_allow_html=True)
         st.markdown("</div>",unsafe_allow_html=True)
