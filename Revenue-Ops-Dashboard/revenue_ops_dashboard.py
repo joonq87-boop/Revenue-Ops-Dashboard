@@ -1196,7 +1196,85 @@ with tabs[2]:
                 for sig in st.session_state.market_ai.get("demand_signals",[])[:4]:
                     st.markdown(f'<div class="news-card"><div style="font-weight:500;font-size:0.9rem">{sig.get("signal","")}</div><div style="font-size:0.78rem;color:#64748b;margin-top:0.2rem">Source: {sig.get("source","")} | Impact: {sig.get("impact","")}</div><div style="font-size:0.82rem;color:#0369a1;margin-top:0.3rem">Adjustment: {sig.get("forecast_adjustment","")}</div></div>',unsafe_allow_html=True)
                 st.markdown("</div>",unsafe_allow_html=True)
-            else: st.markdown('<div class="section-card"><div class="section-title">External Demand Signals</div><div class="upload-hint">Click Fetch Market Intel in Setup.</div></div>',unsafe_allow_html=True)
+            else: st.markdown('<div class="section-card"><div class="section-title">External Demand Signals</div><div class="upload-hint">Market signals will appear after analysis completes.</div></div>',unsafe_allow_html=True)
+
+        # === 6-MONTH DEMAND PROJECTION ===
+        st.markdown("<br>",unsafe_allow_html=True)
+        st.markdown('<div class="section-card"><div class="section-title">6-Month Demand Projection by SKU</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.75rem">Projected demand based on historical seasonal patterns and trend from your data. The model calculates monthly seasonal indices from the past 3 years and applies them to the forward trend.</div>',unsafe_allow_html=True)
+        try:
+            fc_full = st.session_state.fc_df.copy()
+            fc_full["Date"] = pd.to_datetime(fc_full["Month"] + "-01")
+            fc_full["MonthNum"] = fc_full["Date"].dt.month
+            fc_full["YearNum"] = fc_full["Date"].dt.year
+            skus = fc_full["SKU"].unique()
+            proj_rows = []
+            last_date = fc_full["Date"].max()
+            proj_months = pd.date_range(last_date + pd.DateOffset(months=1), periods=6, freq="MS")
+
+            for sku in skus:
+                sd = fc_full[fc_full["SKU"] == sku].sort_values("Date")
+                monthly_avg = sd.groupby("MonthNum")["Actual_Units"].mean()
+                overall_avg = sd["Actual_Units"].mean()
+                seasonal_idx = (monthly_avg / overall_avg).to_dict()
+                # Simple trend: avg of last 6 months vs avg of first 6 months
+                recent_avg = sd.tail(6)["Actual_Units"].mean()
+                early_avg = sd.head(6)["Actual_Units"].mean()
+                monthly_trend = (recent_avg - early_avg) / max(len(sd), 1)
+                for i, pm in enumerate(proj_months):
+                    base = recent_avg + monthly_trend * (i + 1)
+                    si = seasonal_idx.get(pm.month, 1.0)
+                    projected = int(base * si)
+                    proj_rows.append({"SKU": sku, "Month": pm.strftime("%Y-%m"), "Projected": projected, "MonthLabel": pm.strftime("%b %Y")})
+
+            proj_df = pd.DataFrame(proj_rows)
+
+            # Chart: historical + projection per SKU
+            for sku in skus:
+                hist = fc_full[fc_full["SKU"] == sku][["Month","Actual_Units"]].tail(12).copy()
+                hist.columns = ["Month","Units"]
+                hist["Type"] = "Actual"
+                proj = proj_df[proj_df["SKU"] == sku][["Month","Projected"]].copy()
+                proj.columns = ["Month","Units"]
+                proj["Type"] = "Projected"
+                # Add last actual point to projection for continuity
+                bridge = hist.tail(1).copy(); bridge["Type"] = "Projected"
+                combined = pd.concat([hist, bridge, proj], ignore_index=True)
+                combined["Units"] = combined["Units"].astype(int)
+
+                tt = [alt.Tooltip("Month:N"), alt.Tooltip("Units:Q", format=","), alt.Tooltip("Type:N")]
+                chart = alt.Chart(combined).mark_line(
+                    point=alt.OverlayMarkDef(size=30),
+                    strokeWidth=2
+                ).encode(
+                    x=alt.X("Month:N", sort=None, title=None),
+                    y=alt.Y("Units:Q", title="Units", axis=alt.Axis(format=",", labelExpr="datum.value >= 1000 ? format(datum.value, ',.0f') : datum.value")),
+                    color=alt.Color("Type:N", scale=alt.Scale(domain=["Actual","Projected"], range=["#0f172a","#7c3aed"]), legend=alt.Legend(orient="top")),
+                    strokeDash=alt.StrokeDash("Type:N", scale=alt.Scale(domain=["Actual","Projected"], range=[[0],[6,4]])),
+                    tooltip=tt
+                ).properties(height=180, width="container", title=alt.TitleParams(text=sku, fontSize=13, anchor="start"))
+                st.altair_chart(chart, use_container_width=True)
+
+            # Summary table
+            st.markdown('<div style="font-size:0.75rem;font-weight:600;color:#64748b;margin-top:0.75rem;margin-bottom:0.4rem">PROJECTION SUMMARY (Units)</div>',unsafe_allow_html=True)
+            pivot = proj_df.pivot(index="SKU", columns="Month", values="Projected").reset_index()
+            # Format with commas
+            for col in pivot.columns[1:]:
+                pivot[col] = pivot[col].apply(lambda x: f"{int(x):,}")
+            tbl_html = '<table class="cp-table"><tr><th>SKU</th>'
+            for col in pivot.columns[1:]:
+                tbl_html += f'<th>{col}</th>'
+            tbl_html += '</tr>'
+            for _, row in pivot.iterrows():
+                tbl_html += f'<tr><td style="font-weight:500">{row["SKU"]}</td>'
+                for col in pivot.columns[1:]:
+                    tbl_html += f'<td>{row[col]}</td>'
+                tbl_html += '</tr>'
+            tbl_html += '</table>'
+            st.markdown(tbl_html, unsafe_allow_html=True)
+            st.markdown('<div style="font-size:0.7rem;color:#94a3b8;margin-top:0.4rem">Projection method: Seasonal decomposition from historical monthly averages × trend extrapolation. Not a machine learning forecast — intended for directional planning.</div>',unsafe_allow_html=True)
+        except Exception as e:
+            st.markdown(f'<div style="font-size:0.78rem;color:#94a3b8">Projection unavailable: {e}</div>',unsafe_allow_html=True)
+        st.markdown("</div>",unsafe_allow_html=True)
 
         # ─── ORDER MANAGEMENT ───
         st.markdown('<div style="margin-top:2rem;margin-bottom:0.5rem;font-size:0.65rem;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:#0369a1;padding:6px 0;border-top:2px solid #0369a1">ORDER MANAGEMENT</div>',unsafe_allow_html=True)
