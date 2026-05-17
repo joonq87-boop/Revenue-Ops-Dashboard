@@ -369,16 +369,16 @@ def sample_demand():
     np.random.seed(42); skus=["SKU-FMCG-001","SKU-FMCG-002","SKU-FMCG-003","SKU-FMCG-004"]; rows=[]
     for yr in [2022,2023,2024]:
         months=pd.date_range(f"{yr}-01-01",periods=12,freq="MS")
-        err_scale={2022:0.25,2023:0.18,2024:0.12}[yr]
+        err_scale={2022:0.15,2023:0.11,2024:0.08}[yr]
         for sku in skus:
-            base=np.random.randint(800,3000); sku_noise=0.05 if sku!="SKU-FMCG-002" else 0.15
+            base=np.random.randint(800,3000); sku_noise=0.04 if sku!="SKU-FMCG-002" else 0.10
             for m in months:
-                seasonal=0.15*np.sin((m.month-1)/12*2*np.pi)+0.08*np.sin((m.month-1)/12*4*np.pi)
-                cny_bump=0.12 if m.month in [1,2] else 0
-                a=int(base*(1+seasonal+cny_bump+np.random.normal(0,sku_noise))*(1+0.05*(yr-2022)))
+                seasonal=0.12*np.sin((m.month-1)/12*2*np.pi)+0.06*np.sin((m.month-1)/12*4*np.pi)
+                cny_bump=0.10 if m.month in [1,2] else 0
+                a=int(base*(1+seasonal+cny_bump+np.random.normal(0,sku_noise))*(1+0.04*(yr-2022)))
                 f=int(a*(1+np.random.normal(0,err_scale)))
-                pl=max(10,int(a/np.random.randint(50,150))); ot_rate={2022:0.78,2023:0.84,2024:0.88}[yr]
-                ot=int(pl*np.random.uniform(ot_rate-0.08,min(ot_rate+0.05,0.98)))
+                pl=max(10,int(a/np.random.randint(50,150))); ot_rate={2022:0.82,2023:0.87,2024:0.91}[yr]
+                ot=int(pl*np.random.uniform(ot_rate-0.05,min(ot_rate+0.04,0.98)))
                 rows.append({"Month":m.strftime("%Y-%m"),"SKU":sku,"Actual_Units":a,"Forecast_Units":f,"Orders_Placed":pl,"Orders_OTIF":ot})
     return pd.DataFrame(rows)
 
@@ -386,19 +386,19 @@ def sample_o2c(region):
     np.random.seed(42); custs=REGION_CUSTOMERS.get(region,REGION_CUSTOMERS["Singapore"]); rows=[]
     oid=1000
     for yr in [2022,2023,2024]:
-        dso_base={2022:58,2023:52,2024:47}[yr]; err_rate={2022:0.30,2023:0.22,2024:0.18}[yr]
-        disp_rate={2022:0.25,2023:0.18,2024:0.14}[yr]; amend_rate={2022:0.30,2023:0.22,2024:0.18}[yr]
+        dso_base={2022:52,2023:47,2024:43}[yr]; err_rate={2022:0.06,2023:0.04,2024:0.03}[yr]
+        disp_rate={2022:0.05,2023:0.03,2024:0.02}[yr]; amend_rate={2022:0.10,2023:0.07,2024:0.05}[yr]
         for mo in range(1,13):
             n_orders=random.randint(18,24)
             for _ in range(n_orders):
                 od=datetime(yr,mo,1)+timedelta(days=random.randint(0,27))
-                cd=random.randint(1,8); fd=random.randint(1,6)
+                cd=random.randint(1,5); fd=random.randint(1,4)
                 inv=od+timedelta(days=cd)
-                dso_jitter=int(np.random.normal(dso_base,dso_base*0.3))
-                dso_jitter=max(10,min(dso_jitter,180))
+                dso_jitter=int(np.random.normal(dso_base,dso_base*0.25))
+                dso_jitter=max(10,min(dso_jitter,120))
                 pay=inv+timedelta(days=dso_jitter)
                 amt=round(random.uniform(5000,80000),2)
-                rows.append({"Order_ID":f"ORD-{oid}","Customer":random.choice(custs),"Order_Date":od.strftime("%Y-%m-%d"),"Invoice_Date":inv.strftime("%Y-%m-%d"),"Payment_Date":pay.strftime("%Y-%m-%d"),"Invoice_Amount_USD":amt,"DSO_Days":dso_jitter,"Order_Cycle_Days":cd,"Fulfilment_Days":fd,"Invoice_Errors":1 if random.random()<err_rate else 0,"Disputed":1 if random.random()<disp_rate else 0,"OTIF_Flag":1 if random.random()>0.12 else 0,"Return_Flag":1 if random.random()<0.08 else 0,"Amendment_Flag":1 if random.random()<amend_rate else 0,"Deduction_USD":round(random.uniform(50,500) if random.random()<0.15 else 0,2),"Inventory_Days":45,"DPO_Days":30})
+                rows.append({"Order_ID":f"ORD-{oid}","Customer":random.choice(custs),"Order_Date":od.strftime("%Y-%m-%d"),"Invoice_Date":inv.strftime("%Y-%m-%d"),"Payment_Date":pay.strftime("%Y-%m-%d"),"Invoice_Amount_USD":amt,"DSO_Days":dso_jitter,"Order_Cycle_Days":cd,"Fulfilment_Days":fd,"Invoice_Errors":1 if random.random()<err_rate else 0,"Disputed":1 if random.random()<disp_rate else 0,"OTIF_Flag":1 if random.random()>0.08 else 0,"Return_Flag":1 if random.random()<0.05 else 0,"Amendment_Flag":1 if random.random()<amend_rate else 0,"Deduction_USD":round(random.uniform(50,400) if random.random()<0.10 else 0,2),"Inventory_Days":42,"DPO_Days":32})
                 oid+=1
     return pd.DataFrame(rows)
 
