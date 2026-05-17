@@ -1057,10 +1057,14 @@ with tabs[3]:
             st.markdown(f'<div class="metric-card" style="text-align:center"><div class="metric-label">Health</div><div class="metric-value" style="color:{scolor(s)};font-size:2.5rem">{s}</div><div style="font-size:0.75rem;font-weight:600;color:{scolor(s)}">{ai.get("overall_health","")}</div><div class="mex">{reason}</div><div class="msrc">60% data metrics + 40% maturity assessment</div></div>',unsafe_allow_html=True)
         if not bl["cashflow"].empty:
             st.markdown("<br>",unsafe_allow_html=True)
-            st.markdown('<div class="section-card"><div class="section-title">Cash Flow Trend</div>',unsafe_allow_html=True)
-            cf=bl["cashflow"].head(6); cd=pd.DataFrame({"Month":cf["Month"],"Inflow":cf["Inflow"],"Outflow":-cf["Outflow"].abs()}).set_index("Month")
-            st.bar_chart(cd,color=["#16a34a","#dc2626"])
-            nt=cf["Net"].sum(); st.markdown(f'<div style="text-align:center;font-size:0.85rem;color:#64748b">Net Fund Flow: <span style="font-family:JetBrains Mono,monospace;font-weight:600;color:{"#16a34a" if nt>=0 else "#dc2626"}">{fmtc(nt,ccy)}</span></div>',unsafe_allow_html=True)
+            st.markdown('<div class="section-card"><div class="section-title">Cash Flow Trend — Last 12 Months</div>',unsafe_allow_html=True)
+            cf=bl["cashflow"].tail(12).copy()
+            cf["Inflow ($K)"] = (cf["Inflow"] / 1000).round(0).astype(int)
+            cf["Outflow ($K)"] = (cf["Outflow"] / 1000).round(0).astype(int)
+            cd = cf[["Month","Inflow ($K)","Outflow ($K)"]].set_index("Month")
+            st.area_chart(cd, color=["#16a34a","#dc2626"], height=280)
+            nt=cf["Net"].sum()
+            st.markdown(f'<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.82rem;color:#64748b"><span>Values shown in thousands of USD ($K)</span><span>Net Cash Flow: <span style="font-family:JetBrains Mono,monospace;font-weight:700;font-size:0.95rem;color:{"#16a34a" if nt>=0 else "#dc2626"}">${nt/1000:,.0f}K</span></span></div>',unsafe_allow_html=True)
             st.markdown("</div>",unsafe_allow_html=True)
         st.markdown("<br>",unsafe_allow_html=True)
         cs,csm=st.columns([1,2])
@@ -1139,9 +1143,13 @@ with tabs[2]:
         st.markdown("<br>",unsafe_allow_html=True)
         cl,cr=st.columns([2,1])
         with cl:
-            st.markdown('<div class="section-card"><div class="section-title">Forecast vs Actuals</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:1rem">Monthly aggregated actual demand vs forecasted. Gap = forecast error per period.</div>',unsafe_allow_html=True)
+            st.markdown('<div class="section-card"><div class="section-title">Forecast vs Actuals</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:1rem">Monthly aggregated actual demand vs forecasted (units). Gap = forecast error per period.</div>',unsafe_allow_html=True)
             vd=dm["variance"]
-            if not vd.empty: st.line_chart(vd[["Month","Actual","Forecast"]].set_index("Month"),color=["#0f172a","#16a34a"])
+            if not vd.empty:
+                vd_chart = vd[["Month","Actual","Forecast"]].copy()
+                vd_chart["Actual"] = vd_chart["Actual"].round(0).astype(int)
+                vd_chart["Forecast"] = vd_chart["Forecast"].round(0).astype(int)
+                st.line_chart(vd_chart.set_index("Month"),color=["#0f172a","#16a34a"], height=250)
             st.markdown("</div>",unsafe_allow_html=True)
         with cr:
             st.markdown('<div class="section-card"><div class="section-title">Variance Analysis</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.75rem">Difference = Actual minus Forecast (units). Deviation = Variance as % of Forecast.</div>',unsafe_allow_html=True)
@@ -1247,7 +1255,7 @@ with tabs[4]:
         with c4: st.markdown(f'<div class="metric-card-dark"><div class="metric-label" style="color:#f87171">Revenue Leakage</div><div class="metric-value" style="font-size:1.4rem">{lpct}%</div><div style="font-size:0.78rem;color:#94a3b8;margin-top:0.3rem">{fmtc(bl["leak_total"],ccy)}</div><div class="mex" style="color:#64748b">Disc 1.8% + Errors {bl["err"]}%x2.5% + Disputes {bl["disp"]}%x5% + Deductions 0.8%</div><div class="msrc" style="color:#64748b">Source: McKinsey O2C (1.5-3% typical); Normality SPAN Module 4.4</div></div>',unsafe_allow_html=True)
         # Monthly receivable collections chart from actual data
         st.markdown("<br>",unsafe_allow_html=True)
-        st.markdown('<div class="section-card"><div class="section-title">Monthly Collections — Actual vs Expected</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:1rem">Actual cash collected per month vs expected collections based on invoice amounts and payment terms. Gap indicates collection inefficiency.</div>',unsafe_allow_html=True)
+        st.markdown('<div class="section-card"><div class="section-title">Monthly Collections — Actual vs Expected</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:1rem">Actual cash collected per month vs invoices issued. Gap indicates collection inefficiency.</div>',unsafe_allow_html=True)
         try:
             cf_data = o2c_filtered.copy()
             cf_data["Pay_Month"] = pd.to_datetime(cf_data["Payment_Date"]).dt.to_period("M").astype(str)
@@ -1256,9 +1264,12 @@ with tabs[4]:
             invoiced = cf_data.groupby("Inv_Month")["Invoice_Amount_USD"].sum().rename("Invoiced")
             monthly = pd.DataFrame({"Collected": collected, "Invoiced": invoiced}).fillna(0).sort_index().tail(12)
             if len(monthly) > 2:
-                st.line_chart(monthly, color=["#16a34a","#0369a1"], height=220)
+                monthly_k = monthly.copy()
+                monthly_k["Collected ($K)"] = (monthly_k["Collected"] / 1000).round(0).astype(int)
+                monthly_k["Invoiced ($K)"] = (monthly_k["Invoiced"] / 1000).round(0).astype(int)
+                st.line_chart(monthly_k[["Collected ($K)","Invoiced ($K)"]], color=["#16a34a","#0369a1"], height=250)
                 gap_pct = round((1 - monthly["Collected"].sum() / max(monthly["Invoiced"].sum(),1)) * 100, 1)
-                st.markdown(f'<div style="font-size:0.78rem;color:#64748b">Collection efficiency: <span style="font-weight:600;color:{"#16a34a" if gap_pct<5 else "#f59e0b" if gap_pct<15 else "#dc2626"}">{100-gap_pct}%</span> — {fmtc(monthly["Invoiced"].sum()-monthly["Collected"].sum(),ccy,True)} gap over the period shown.</div>',unsafe_allow_html=True)
+                st.markdown(f'<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.82rem;color:#64748b"><span>Values shown in thousands of USD ($K)</span><span>Collection efficiency: <span style="font-weight:600;color:{"#16a34a" if gap_pct<5 else "#f59e0b" if gap_pct<15 else "#dc2626"}">{100-gap_pct}%</span> — ${(monthly["Invoiced"].sum()-monthly["Collected"].sum())/1000:,.0f}K gap</span></div>',unsafe_allow_html=True)
         except: pass
         st.markdown("</div>",unsafe_allow_html=True)
         st.markdown("<br>",unsafe_allow_html=True)
@@ -1386,7 +1397,8 @@ with tabs[5]:
             st.markdown("<br>",unsafe_allow_html=True)
             lt_l,lt_r=st.columns([3,2])
             with lt_l:
-                st.markdown('<div class="section-card"><div class="section-title">Customer LTV Rankings</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.75rem">Ranked by projected 12-month LTV. Revenue rank vs LTV rank reveals customers where revenue overstates true profitability.</div>',unsafe_allow_html=True)
+                st.markdown('<div class="section-card"><div class="section-title">Customer LTV Rankings</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.5rem">Ranked by projected 12-month LTV. Revenue rank vs LTV rank reveals customers where revenue overstates true profitability.</div>',unsafe_allow_html=True)
+                st.markdown('<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;margin-bottom:6px;border-bottom:2px solid #e2e8f0"><div style="font-size:0.68rem;color:#94a3b8;font-weight:600">CUSTOMER · SEGMENT</div><div style="display:flex;align-items:center;gap:10px;font-size:0.68rem;color:#94a3b8;font-weight:600"><span>Rev Rank</span><span>LTV Rank</span><span style="width:80px;text-align:right">12M LTV ($)</span><span style="width:30px;text-align:center">Health</span><span style="width:50px;text-align:center">Churn</span></div></div>',unsafe_allow_html=True)
                 # Compute revenue rank and LTV rank
                 ranked = ltv_df.head(10).copy()
                 ranked["rev_rank"] = ltv_df["total_revenue"].rank(ascending=False, method="min").astype(int)
