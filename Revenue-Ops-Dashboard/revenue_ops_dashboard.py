@@ -1064,23 +1064,14 @@ with tabs[3]:
             cf["Outflow ($K)"] = (cf["Outflow"] / 1000).round(0).astype(int)
             cf["Net ($K)"] = cf["Inflow ($K)"] - cf["Outflow ($K)"]
             cf["Status"] = cf["Net ($K)"].apply(lambda v: "Surplus" if v >= 0 else "Deficit")
-            cf_melt = cf.melt(id_vars=["Month","Net ($K)","Status"], value_vars=["Inflow ($K)","Outflow ($K)"], var_name="Type", value_name="Amount ($K)")
-            base = alt.Chart(cf_melt).encode(x=alt.X("Month:N", sort=None, title=None))
-            areas = base.mark_area(opacity=0.35, line=alt.OverlayMarkDef(strokeWidth=2.5)).encode(
-                y=alt.Y("Amount ($K):Q", title="$K", axis=alt.Axis(format=",")),
-                color=alt.Color("Type:N", scale=alt.Scale(domain=["Inflow ($K)","Outflow ($K)"], range=["#16a34a","#dc2626"]), legend=alt.Legend(orient="top")),
-                tooltip=[
-                    alt.Tooltip("Month:N", title="Month"),
-                    alt.Tooltip("Inflow ($K):Q", title="Inflow ($K)", format=","),
-                    alt.Tooltip("Outflow ($K):Q", title="Outflow ($K)", format=","),
-                    alt.Tooltip("Net ($K):Q", title="Net ($K)", format="+,"),
-                    alt.Tooltip("Status:N", title="Status"),
-                ]
-            )
-            chart = areas.properties(height=280, width="container").configure_view(strokeWidth=0)
+            tt = [alt.Tooltip("Month:N"),alt.Tooltip("Inflow ($K):Q",format=","),alt.Tooltip("Outflow ($K):Q",format=","),alt.Tooltip("Net ($K):Q",format="+,"),alt.Tooltip("Status:N")]
+            base = alt.Chart(cf).encode(x=alt.X("Month:N",sort=None,title=None))
+            inflow = base.mark_area(opacity=0.3,line=alt.OverlayMarkDef(strokeWidth=2.5),color="#16a34a").encode(y=alt.Y("Inflow ($K):Q",title="$K",axis=alt.Axis(format=",")),tooltip=tt)
+            outflow = base.mark_area(opacity=0.3,line=alt.OverlayMarkDef(strokeWidth=2.5),color="#dc2626").encode(y="Outflow ($K):Q",tooltip=tt)
+            chart = (inflow + outflow).properties(height=280,width="container").configure_view(strokeWidth=0)
             st.altair_chart(chart, use_container_width=True)
             nt=cf["Net ($K)"].sum()
-            st.markdown(f'<div style="text-align:right;font-size:0.82rem;color:#64748b">Net Cash Flow: <span style="font-family:JetBrains Mono,monospace;font-weight:700;font-size:0.95rem;color:{"#16a34a" if nt>=0 else "#dc2626"}">${nt:,}K</span></div>',unsafe_allow_html=True)
+            st.markdown(f'<div style="display:flex;justify-content:space-between;font-size:0.78rem;color:#64748b"><span><span style="color:#16a34a">━</span> Inflow <span style="color:#dc2626">━</span> Outflow</span><span>Net: <span style="font-family:JetBrains Mono;font-weight:700;color:{"#16a34a" if nt>=0 else "#dc2626"}">${nt:,}K</span></span></div>',unsafe_allow_html=True)
             st.markdown("</div>",unsafe_allow_html=True)
         st.markdown("<br>",unsafe_allow_html=True)
         cs,csm=st.columns([1,2])
@@ -1162,26 +1153,18 @@ with tabs[2]:
             st.markdown('<div class="section-card"><div class="section-title">Forecast vs Actuals</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:1rem">Monthly aggregated actual demand vs forecasted (units). Hover to see variance.</div>',unsafe_allow_html=True)
             vd=dm["variance"]
             if not vd.empty:
-                vd_chart = vd[["Month","Actual","Forecast"]].copy()
-                vd_chart["Actual"] = vd_chart["Actual"].round(0).astype(int)
-                vd_chart["Forecast"] = vd_chart["Forecast"].round(0).astype(int)
-                vd_chart["Variance"] = vd_chart["Actual"] - vd_chart["Forecast"]
-                vd_chart["Status"] = vd_chart["Variance"].apply(lambda v: "Surplus" if v >= 0 else "Deficit")
-                vd_melt = vd_chart.melt(id_vars=["Month","Variance","Status"], value_vars=["Actual","Forecast"], var_name="Type", value_name="Units")
-                base = alt.Chart(vd_melt).encode(x=alt.X("Month:N", sort=None, title=None))
-                lines = base.mark_line(strokeWidth=2.5, point=alt.OverlayMarkDef(size=40)).encode(
-                    y=alt.Y("Units:Q", title="Units", axis=alt.Axis(format=",")),
-                    color=alt.Color("Type:N", scale=alt.Scale(domain=["Actual","Forecast"], range=["#0f172a","#16a34a"]), legend=alt.Legend(orient="top")),
-                    tooltip=[
-                        alt.Tooltip("Month:N", title="Month"),
-                        alt.Tooltip("Actual:Q", title="Actual", format=","),
-                        alt.Tooltip("Forecast:Q", title="Forecast", format=","),
-                        alt.Tooltip("Variance:Q", title="Variance (A−F)", format="+,"),
-                        alt.Tooltip("Status:N", title="Status"),
-                    ]
-                )
-                chart = lines.properties(height=260, width="container").configure_view(strokeWidth=0)
+                vc = vd[["Month","Actual","Forecast"]].copy()
+                vc["Actual"] = vc["Actual"].round(0).astype(int)
+                vc["Forecast"] = vc["Forecast"].round(0).astype(int)
+                vc["Variance"] = vc["Actual"] - vc["Forecast"]
+                vc["Status"] = vc["Variance"].apply(lambda v: "Surplus" if v >= 0 else "Deficit")
+                tt = [alt.Tooltip("Month:N"),alt.Tooltip("Actual:Q",format=","),alt.Tooltip("Forecast:Q",format=","),alt.Tooltip("Variance:Q",title="Variance (A−F)",format="+,"),alt.Tooltip("Status:N")]
+                base = alt.Chart(vc).encode(x=alt.X("Month:N",sort=None,title=None))
+                act_line = base.mark_line(strokeWidth=2.5,point=alt.OverlayMarkDef(size=40),color="#0f172a").encode(y=alt.Y("Actual:Q",title="Units",axis=alt.Axis(format=",")),tooltip=tt)
+                fc_line = base.mark_line(strokeWidth=2.5,point=alt.OverlayMarkDef(size=40),color="#16a34a").encode(y="Forecast:Q",tooltip=tt)
+                chart = (act_line + fc_line).properties(height=260,width="container").configure_view(strokeWidth=0)
                 st.altair_chart(chart, use_container_width=True)
+                st.markdown('<div style="font-size:0.78rem;color:#64748b"><span style="color:#0f172a">━</span> Actual <span style="color:#16a34a">━</span> Forecast</div>',unsafe_allow_html=True)
             st.markdown("</div>",unsafe_allow_html=True)
         with cr:
             st.markdown('<div class="section-card"><div class="section-title">Variance Analysis</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.75rem">Difference = Actual minus Forecast (units). Deviation = Variance as % of Forecast.</div>',unsafe_allow_html=True)
@@ -1296,29 +1279,19 @@ with tabs[4]:
             invoiced = cf_data.groupby("Inv_Month")["Invoice_Amount_USD"].sum().rename("Invoiced")
             monthly = pd.DataFrame({"Collected": collected, "Invoiced": invoiced}).fillna(0).sort_index().tail(12)
             if len(monthly) > 2:
-                monthly_k = monthly.copy()
-                monthly_k["Month"] = monthly_k.index
-                monthly_k["Collected ($K)"] = (monthly_k["Collected"] / 1000).round(0).astype(int)
-                monthly_k["Invoiced ($K)"] = (monthly_k["Invoiced"] / 1000).round(0).astype(int)
-                monthly_k["Gap ($K)"] = monthly_k["Invoiced ($K)"] - monthly_k["Collected ($K)"]
-                monthly_k["Status"] = monthly_k["Gap ($K)"].apply(lambda v: "Under-collected" if v > 0 else "Over-collected")
-                mk_melt = monthly_k.melt(id_vars=["Month","Gap ($K)","Status"], value_vars=["Collected ($K)","Invoiced ($K)"], var_name="Type", value_name="Amount ($K)")
-                base = alt.Chart(mk_melt).encode(x=alt.X("Month:N", sort=None, title=None))
-                lines = base.mark_line(strokeWidth=2.5, point=alt.OverlayMarkDef(size=40)).encode(
-                    y=alt.Y("Amount ($K):Q", title="$K", axis=alt.Axis(format=",")),
-                    color=alt.Color("Type:N", scale=alt.Scale(domain=["Collected ($K)","Invoiced ($K)"], range=["#16a34a","#0369a1"]), legend=alt.Legend(orient="top")),
-                    tooltip=[
-                        alt.Tooltip("Month:N", title="Month"),
-                        alt.Tooltip("Invoiced ($K):Q", title="Invoiced ($K)", format=","),
-                        alt.Tooltip("Collected ($K):Q", title="Collected ($K)", format=","),
-                        alt.Tooltip("Gap ($K):Q", title="Gap ($K)", format="+,"),
-                        alt.Tooltip("Status:N", title="Status"),
-                    ]
-                )
-                chart = lines.properties(height=260, width="container").configure_view(strokeWidth=0)
+                mk = monthly.reset_index(); mk.columns = ["Month","Collected","Invoiced"]
+                mk["Collected ($K)"] = (mk["Collected"] / 1000).round(0).astype(int)
+                mk["Invoiced ($K)"] = (mk["Invoiced"] / 1000).round(0).astype(int)
+                mk["Gap ($K)"] = mk["Invoiced ($K)"] - mk["Collected ($K)"]
+                mk["Status"] = mk["Gap ($K)"].apply(lambda v: "Under-collected" if v > 0 else "Over-collected")
+                tt = [alt.Tooltip("Month:N"),alt.Tooltip("Invoiced ($K):Q",format=","),alt.Tooltip("Collected ($K):Q",format=","),alt.Tooltip("Gap ($K):Q",format="+,"),alt.Tooltip("Status:N")]
+                base = alt.Chart(mk).encode(x=alt.X("Month:N",sort=None,title=None))
+                inv_line = base.mark_line(strokeWidth=2.5,point=alt.OverlayMarkDef(size=40),color="#0369a1").encode(y=alt.Y("Invoiced ($K):Q",title="$K",axis=alt.Axis(format=",")),tooltip=tt)
+                col_line = base.mark_line(strokeWidth=2.5,point=alt.OverlayMarkDef(size=40),color="#16a34a").encode(y="Collected ($K):Q",tooltip=tt)
+                chart = (inv_line + col_line).properties(height=260,width="container").configure_view(strokeWidth=0)
                 st.altair_chart(chart, use_container_width=True)
                 gap_pct = round((1 - monthly["Collected"].sum() / max(monthly["Invoiced"].sum(),1)) * 100, 1)
-                st.markdown(f'<div style="text-align:right;font-size:0.82rem;color:#64748b">Collection efficiency: <span style="font-weight:600;color:{"#16a34a" if gap_pct<5 else "#f59e0b" if gap_pct<15 else "#dc2626"}">{100-gap_pct}%</span> — ${(monthly["Invoiced"].sum()-monthly["Collected"].sum())/1000:,.0f}K gap</div>',unsafe_allow_html=True)
+                st.markdown(f'<div style="display:flex;justify-content:space-between;font-size:0.78rem;color:#64748b"><span><span style="color:#0369a1">━</span> Invoiced <span style="color:#16a34a">━</span> Collected</span><span>Efficiency: <span style="font-weight:600;color:{"#16a34a" if gap_pct<5 else "#f59e0b" if gap_pct<15 else "#dc2626"}">{100-gap_pct}%</span> — ${(monthly["Invoiced"].sum()-monthly["Collected"].sum())/1000:,.0f}K gap</span></div>',unsafe_allow_html=True)
         except: pass
         st.markdown("</div>",unsafe_allow_html=True)
         st.markdown("<br>",unsafe_allow_html=True)
