@@ -219,11 +219,14 @@ def calc_customer_ltv(df, industry):
     cust["cost_to_serve"] = (cust["deductions"] + cust["total_revenue"] * (cust["dispute_rate"] / 100) * 0.05 + cust["total_revenue"] * (cust["return_rate"] / 100) * 0.15)
     cust["net_margin"] = cust["est_gross_margin"] - cust["cost_to_serve"]
     cust["net_margin_pct"] = (cust["net_margin"] / cust["total_revenue"].replace(0, np.nan) * 100).round(1)
-    dso_score = (100 - ((cust["avg_dso"] - bench_dso).clip(lower=0) / bench_dso * 50)).clip(0, 100)
-    dispute_score = (100 - cust["dispute_rate"] * 10).clip(0, 100)
+    dso_score = (100 - ((cust["avg_dso"] - bench_dso).clip(lower=0) / bench_dso * 60)).clip(0, 100)
+    dispute_score = (100 - cust["dispute_rate"] * 12).clip(0, 100)
     frequency_score = (cust["order_count"] / cust["order_count"].max() * 100).clip(0, 100)
     revenue_score = (cust["total_revenue"] / cust["total_revenue"].max() * 100).clip(0, 100)
-    cust["health_score"] = (revenue_score * 0.30 + frequency_score * 0.20 + dso_score * 0.30 + dispute_score * 0.20).round(0).astype(int)
+    cust["health_score"] = (revenue_score * 0.15 + frequency_score * 0.15 + dso_score * 0.40 + dispute_score * 0.30).round(0).astype(int)
+    # Hard penalty: if DSO > 2x benchmark or dispute > 15%, cap health at 35
+    cust.loc[cust["avg_dso"] > bench_dso * 1.8, "health_score"] = cust.loc[cust["avg_dso"] > bench_dso * 1.8, "health_score"].clip(upper=35)
+    cust.loc[cust["dispute_rate"] > 12, "health_score"] = cust.loc[cust["dispute_rate"] > 12, "health_score"].clip(upper=35)
     cust["ltv_12m"] = (cust["monthly_revenue"] * 12 * 0.35 - cust["cost_to_serve"] / cust["tenure_months"] * 12).round(0)
     cust["churn_risk"] = cust["health_score"].apply(lambda x: "High" if x < 40 else "Medium" if x < 65 else "Low")
     def assign_segment(r):
@@ -1114,7 +1117,7 @@ with tabs[2]:
         render_health_banner(show_modules=["Demand Forecasting"])
         # Year filter
         fc_years = get_demand_years(st.session_state.fc_df)
-        sel_yr = st.select_slider("📅 Period", options=fc_years, value="Last 3 Years", key="fc_yr")
+        sel_yr = st.radio("📅 Period", options=fc_years, horizontal=True, key="fc_yr")
         fc_filtered = filter_demand_by_year(st.session_state.fc_df, sel_yr)
         dm = calc_demand(fc_filtered) if sel_yr != "Last 3 Years" else st.session_state.dm
         ob=INDUSTRIES[industry]["otif_benchmark"]
@@ -1224,7 +1227,7 @@ with tabs[4]:
         render_health_banner(show_modules=["Billing & Revenue Mgmt","Post-Sales & Financial Closure"])
         # Year filter
         o2c_years = get_available_years(st.session_state.o2c_df)
-        sel_yr_cfo = st.select_slider("📅 Period", options=o2c_years, value="Last 3 Years", key="cfo_yr")
+        sel_yr_cfo = st.radio("📅 Period", options=o2c_years, horizontal=True, key="cfo_yr")
         o2c_filtered = filter_by_year(st.session_state.o2c_df, sel_yr_cfo)
         bl = calc_billing(o2c_filtered, industry) if sel_yr_cfo != "Last 3 Years" else st.session_state.bl
         lpct=round((bl["leak_total"]/max(bl["rev"],1))*100,1)
