@@ -367,38 +367,44 @@ Return ONLY valid JSON: {{"demand_signals":[{{"signal":"...","source":"...","imp
 
 def sample_demand():
     np.random.seed(42); skus=["SKU-FMCG-001","SKU-FMCG-002","SKU-FMCG-003","SKU-FMCG-004"]; rows=[]
-    for yr in [2022,2023,2024]:
-        months=pd.date_range(f"{yr}-01-01",periods=12,freq="MS")
-        err_scale={2022:0.15,2023:0.11,2024:0.08}[yr]
+    for yr in [2023,2024,2025,2026]:
+        max_mo = 5 if yr == 2026 else 12
+        months=pd.date_range(f"{yr}-01-01",periods=max_mo,freq="MS")
+        err_scale={2023:0.14,2024:0.10,2025:0.08,2026:0.07}[yr]
         for sku in skus:
-            base=np.random.randint(800,3000); sku_noise=0.04 if sku!="SKU-FMCG-002" else 0.10
+            base=np.random.randint(900,2800)
+            sku_err = err_scale * 2.2 if sku == "SKU-FMCG-002" else err_scale
+            sku_bias = -0.06 if sku == "SKU-FMCG-002" else 0.0
             for m in months:
-                seasonal=0.12*np.sin((m.month-1)/12*2*np.pi)+0.06*np.sin((m.month-1)/12*4*np.pi)
+                seasonal=0.10*np.sin((m.month-1)/12*2*np.pi)+0.05*np.sin((m.month-1)/12*4*np.pi)
                 cny_bump=0.10 if m.month in [1,2] else 0
-                a=int(base*(1+seasonal+cny_bump+np.random.normal(0,sku_noise))*(1+0.04*(yr-2022)))
-                f=int(a*(1+np.random.normal(0,err_scale)))
-                pl=max(10,int(a/np.random.randint(50,150))); ot_rate={2022:0.82,2023:0.87,2024:0.91}[yr]
-                ot=int(pl*np.random.uniform(ot_rate-0.05,min(ot_rate+0.04,0.98)))
+                a=int(base*(1+seasonal+cny_bump+np.random.normal(0,0.04))*(1+0.04*(yr-2023)))
+                f=int(a*(1+sku_bias+np.random.normal(0,sku_err)))
+                pl=max(10,int(a/np.random.randint(50,150))); ot_rate={2023:0.83,2024:0.87,2025:0.90,2026:0.92}[yr]
+                ot=int(pl*np.random.uniform(ot_rate-0.04,min(ot_rate+0.04,0.98)))
                 rows.append({"Month":m.strftime("%Y-%m"),"SKU":sku,"Actual_Units":a,"Forecast_Units":f,"Orders_Placed":pl,"Orders_OTIF":ot})
     return pd.DataFrame(rows)
 
 def sample_o2c(region):
     np.random.seed(42); custs=REGION_CUSTOMERS.get(region,REGION_CUSTOMERS["Singapore"]); rows=[]
     oid=1000
-    for yr in [2022,2023,2024]:
-        dso_base={2022:52,2023:47,2024:43}[yr]; err_rate={2022:0.06,2023:0.04,2024:0.03}[yr]
-        disp_rate={2022:0.05,2023:0.03,2024:0.02}[yr]; amend_rate={2022:0.10,2023:0.07,2024:0.05}[yr]
-        for mo in range(1,13):
+    for yr in [2023,2024,2025,2026]:
+        max_mo = 5 if yr == 2026 else 12
+        dso_base={2023:52,2024:48,2025:44,2026:42}[yr]
+        err_rate={2023:0.06,2024:0.04,2025:0.03,2026:0.025}[yr]
+        disp_rate={2023:0.05,2024:0.035,2025:0.025,2026:0.02}[yr]
+        amend_rate={2023:0.09,2024:0.07,2025:0.05,2026:0.04}[yr]
+        for mo in range(1,max_mo+1):
             n_orders=random.randint(18,24)
             for _ in range(n_orders):
-                od=datetime(yr,mo,1)+timedelta(days=random.randint(0,27))
+                od=datetime(yr,mo,1)+timedelta(days=random.randint(0,min(27,28)))
                 cd=random.randint(1,5); fd=random.randint(1,4)
                 inv=od+timedelta(days=cd)
-                dso_jitter=int(np.random.normal(dso_base,dso_base*0.25))
-                dso_jitter=max(10,min(dso_jitter,120))
+                dso_jitter=int(np.random.normal(dso_base,dso_base*0.22))
+                dso_jitter=max(12,min(dso_jitter,110))
                 pay=inv+timedelta(days=dso_jitter)
                 amt=round(random.uniform(5000,80000),2)
-                rows.append({"Order_ID":f"ORD-{oid}","Customer":random.choice(custs),"Order_Date":od.strftime("%Y-%m-%d"),"Invoice_Date":inv.strftime("%Y-%m-%d"),"Payment_Date":pay.strftime("%Y-%m-%d"),"Invoice_Amount_USD":amt,"DSO_Days":dso_jitter,"Order_Cycle_Days":cd,"Fulfilment_Days":fd,"Invoice_Errors":1 if random.random()<err_rate else 0,"Disputed":1 if random.random()<disp_rate else 0,"OTIF_Flag":1 if random.random()>0.08 else 0,"Return_Flag":1 if random.random()<0.05 else 0,"Amendment_Flag":1 if random.random()<amend_rate else 0,"Deduction_USD":round(random.uniform(50,400) if random.random()<0.10 else 0,2),"Inventory_Days":42,"DPO_Days":32})
+                rows.append({"Order_ID":f"ORD-{oid}","Customer":random.choice(custs),"Order_Date":od.strftime("%Y-%m-%d"),"Invoice_Date":inv.strftime("%Y-%m-%d"),"Payment_Date":pay.strftime("%Y-%m-%d"),"Invoice_Amount_USD":amt,"DSO_Days":dso_jitter,"Order_Cycle_Days":cd,"Fulfilment_Days":fd,"Invoice_Errors":1 if random.random()<err_rate else 0,"Disputed":1 if random.random()<disp_rate else 0,"OTIF_Flag":1 if random.random()>0.06 else 0,"Return_Flag":1 if random.random()<0.04 else 0,"Amendment_Flag":1 if random.random()<amend_rate else 0,"Deduction_USD":round(random.uniform(50,400) if random.random()<0.08 else 0,2),"Inventory_Days":42,"DPO_Days":32})
                 oid+=1
     return pd.DataFrame(rows)
 
@@ -422,28 +428,37 @@ def parse_maturity_csv(df):
     for k in q_keys: diag[k]=int(params.get(k,0))
     return region, industry, currency, diag
 
-def filter_by_year(df, year, date_col="Order_Date"):
-    """Filter dataframe by year. Returns full df if year=='All'."""
-    if year == "All": return df
-    dc = pd.to_datetime(df[date_col])
-    return df[dc.dt.year == int(year)]
-
-def filter_demand_by_year(df, year):
-    if year == "All": return df
-    return df[df["Month"].str.startswith(str(year))]
-
 def get_available_years(df, date_col="Order_Date"):
     """Extract unique years from dataframe."""
     try:
         years = sorted(pd.to_datetime(df[date_col]).dt.year.unique().tolist())
-        return ["All"] + [str(y) for y in years]
+        labels = []
+        for y in years:
+            if y == 2026: labels.append("2026 YTD")
+            else: labels.append(str(y))
+        return ["All"] + labels
     except: return ["All"]
 
 def get_demand_years(df):
     try:
         years = sorted(df["Month"].str[:4].unique().tolist())
-        return ["All"] + years
+        labels = []
+        for y in years:
+            if y == "2026": labels.append("2026 YTD")
+            else: labels.append(y)
+        return ["All"] + labels
     except: return ["All"]
+
+def filter_by_year(df, year, date_col="Order_Date"):
+    if year == "All": return df
+    yr = int(year.replace(" YTD",""))
+    dc = pd.to_datetime(df[date_col])
+    return df[dc.dt.year == yr]
+
+def filter_demand_by_year(df, year):
+    if year == "All": return df
+    yr = year.replace(" YTD","")
+    return df[df["Month"].str.startswith(yr)]
 
 def scolor(s): return "#16a34a" if s>=70 else "#ea580c" if s>=45 else "#dc2626"
 
@@ -650,7 +665,7 @@ tabs=st.tabs(["⚙ Setup","🏥 Executive Health Report","📊 ForecastIQ Dashbo
 
 with tabs[0]:
     st.markdown('<div style="font-size:1.3rem;font-weight:700;color:#0c1222;letter-spacing:-0.02em">Setup & Configuration</div><div style="font-size:0.88rem;color:#64748b;margin-bottom:1.5rem">Upload three data files and click Run. No manual configuration needed.</div>',unsafe_allow_html=True)
-    st.markdown('<div class="section-card"><div class="section-title">Data Templates — Download & Fill</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.75rem">Download templates, fill with your data, re-upload. Or click Load Demo Data for pre-built 3-year sample (2022–2024).</div>',unsafe_allow_html=True)
+    st.markdown('<div class="section-card"><div class="section-title">Data Templates — Download & Fill</div><div class="mex" style="margin-top:-0.5rem;margin-bottom:0.75rem">Download templates, fill with your data, re-upload. Or click Load Demo Data for pre-built sample data (Jan 2023 – May 2026).</div>',unsafe_allow_html=True)
     tpl1,tpl2,tpl3=st.columns(3)
     with tpl1:
         tpl_fc = sample_demand()
