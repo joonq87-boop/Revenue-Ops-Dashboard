@@ -762,6 +762,16 @@ with tabs[0]:
                 with st.spinner("Agent simulation..."):
                     try: st.session_state.ai_agents=get_agent_simulation(st.session_state.dm,st.session_state.om,st.session_state.fl,st.session_state.bl,st.session_state.ps,st.session_state.mod_scores,region,industry,ccy)
                     except: pass
+                with st.spinner("Fetching market signals..."):
+                    try: st.session_state.news=fetch_news(region,industry)
+                    except: pass
+                    try: st.session_state.wb=fetch_wb(region,industry)
+                    except: pass
+                    try: st.session_state.gt=fetch_gt(INDUSTRIES[industry]["keywords"][:3],region)
+                    except: pass
+                    try: st.session_state.market_ai=get_demand_signals_ai(region,industry,st.session_state.news or [],st.session_state.wb or {},st.session_state.gt or {})
+                    except: pass
+                    st.session_state.market_fetched=True
                 st.session_state.done=True; st.rerun()
     if st.session_state.fc_df is not None:
         st.markdown(f'<div class="info-box">📊 Data loaded — Demand: {len(st.session_state.fc_df)} rows · O2C: {len(st.session_state.o2c_df) if st.session_state.o2c_df is not None else 0} rows · Config: {st.session_state.region}, {st.session_state.industry}, {st.session_state.display_ccy}</div>',unsafe_allow_html=True)
@@ -1066,7 +1076,7 @@ with tabs[3]:
             cf["Status"] = cf["Net ($K)"].apply(lambda v: "Surplus" if v >= 0 else "Deficit")
             tt = [alt.Tooltip("Month:N"),alt.Tooltip("Inflow ($K):Q",format=","),alt.Tooltip("Outflow ($K):Q",format=","),alt.Tooltip("Net ($K):Q",format="+,"),alt.Tooltip("Status:N")]
             base = alt.Chart(cf).encode(x=alt.X("Month:N",sort=None,title=None))
-            inflow = base.mark_area(opacity=0.3,line=alt.OverlayMarkDef(strokeWidth=2.5),color="#16a34a").encode(y=alt.Y("Inflow ($K):Q",title="$K",axis=alt.Axis(format=",")),tooltip=tt)
+            inflow = base.mark_area(opacity=0.3,line=alt.OverlayMarkDef(strokeWidth=2.5),color="#16a34a").encode(y=alt.Y("Inflow ($K):Q",title="$K",axis=alt.Axis(format=",",labelExpr="datum.value >= 1000 ? format(datum.value, ',.0f') : datum.value")),tooltip=tt)
             outflow = base.mark_area(opacity=0.3,line=alt.OverlayMarkDef(strokeWidth=2.5),color="#dc2626").encode(y="Outflow ($K):Q",tooltip=tt)
             chart = (inflow + outflow).properties(height=280,width="container").configure_view(strokeWidth=0)
             st.altair_chart(chart, use_container_width=True)
@@ -1160,7 +1170,7 @@ with tabs[2]:
                 vc["Status"] = vc["Variance"].apply(lambda v: "Surplus" if v >= 0 else "Deficit")
                 tt = [alt.Tooltip("Month:N"),alt.Tooltip("Actual:Q",format=","),alt.Tooltip("Forecast:Q",format=","),alt.Tooltip("Variance:Q",title="Variance (A−F)",format="+,"),alt.Tooltip("Status:N")]
                 base = alt.Chart(vc).encode(x=alt.X("Month:N",sort=None,title=None))
-                act_line = base.mark_line(strokeWidth=2.5,point=alt.OverlayMarkDef(size=40),color="#0f172a").encode(y=alt.Y("Actual:Q",title="Units",axis=alt.Axis(format=",")),tooltip=tt)
+                act_line = base.mark_line(strokeWidth=2.5,point=alt.OverlayMarkDef(size=40),color="#0f172a").encode(y=alt.Y("Actual:Q",title="Units",axis=alt.Axis(format=",",labelExpr="datum.value >= 1000 ? format(datum.value, ',.0f') : datum.value")),tooltip=tt)
                 fc_line = base.mark_line(strokeWidth=2.5,point=alt.OverlayMarkDef(size=40),color="#16a34a").encode(y="Forecast:Q",tooltip=tt)
                 chart = (act_line + fc_line).properties(height=260,width="container").configure_view(strokeWidth=0)
                 st.altair_chart(chart, use_container_width=True)
@@ -1286,7 +1296,7 @@ with tabs[4]:
                 mk["Status"] = mk["Gap ($K)"].apply(lambda v: "Under-collected" if v > 0 else "Over-collected")
                 tt = [alt.Tooltip("Month:N"),alt.Tooltip("Invoiced ($K):Q",format=","),alt.Tooltip("Collected ($K):Q",format=","),alt.Tooltip("Gap ($K):Q",format="+,"),alt.Tooltip("Status:N")]
                 base = alt.Chart(mk).encode(x=alt.X("Month:N",sort=None,title=None))
-                inv_line = base.mark_line(strokeWidth=2.5,point=alt.OverlayMarkDef(size=40),color="#0369a1").encode(y=alt.Y("Invoiced ($K):Q",title="$K",axis=alt.Axis(format=",")),tooltip=tt)
+                inv_line = base.mark_line(strokeWidth=2.5,point=alt.OverlayMarkDef(size=40),color="#0369a1").encode(y=alt.Y("Invoiced ($K):Q",title="$K",axis=alt.Axis(format=",",labelExpr="datum.value >= 1000 ? format(datum.value, ',.0f') : datum.value")),tooltip=tt)
                 col_line = base.mark_line(strokeWidth=2.5,point=alt.OverlayMarkDef(size=40),color="#16a34a").encode(y="Collected ($K):Q",tooltip=tt)
                 chart = (inv_line + col_line).properties(height=260,width="container").configure_view(strokeWidth=0)
                 st.altair_chart(chart, use_container_width=True)
